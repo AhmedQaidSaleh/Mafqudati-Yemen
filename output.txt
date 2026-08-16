@@ -1,0 +1,8 @@
+    const { reportId } = req.params;
+
+    await db.delete(savedReports).where(
+      and(
+        eq(savedReports.user_id, req.user.id),
+        eq(savedReports.report_id, reportId)
+      )
+    );

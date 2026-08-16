@@ -1,0 +1,4 @@
+server/auth/firebase.ts(5,13): error TS2339: Property 'apps' does not exist on type 'typeof import("/app/applet/node_modules/firebase-admin/lib/index")'.
+server/auth/firebase.ts(13,27): error TS2339: Property 'credential' does not exist on type 'typeof import("/app/applet/node_modules/firebase-admin/lib/index")'.
+server/auth/firebase.ts(30,35): error TS2339: Property 'apps' does not exist on type 'typeof import("/app/applet/node_modules/firebase-admin/lib/index")'.
+server/auth/firebase.ts(30,59): error TS2339: Property 'auth' does not exist on type 'typeof import("/app/applet/node_modules/firebase-admin/lib/index")'.

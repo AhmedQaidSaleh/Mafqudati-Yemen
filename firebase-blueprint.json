@@ -1,0 +1,55 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "User profile representation in Firestore",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "firebaseUid": { "type": "string" },
+        "email": { "type": "string", "format": "email" },
+        "fullName": { "type": "string", "maxLength": 100 },
+        "phone": { "type": "string", "maxLength": 30 },
+        "role": { "type": "string", "enum": ["USER", "ADMIN"] },
+        "avatarUrl": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["firebaseUid", "email", "fullName", "role"]
+    },
+    "Report": {
+      "title": "Report",
+      "description": "Lost or found item report",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "userId": { "type": "string" },
+        "type": { "type": "string", "enum": ["lost", "found"] },
+        "status": { "type": "string", "enum": ["active", "resolved", "closed"] },
+        "title": { "type": "string", "maxLength": 200 },
+        "description": { "type": "string", "maxLength": 2000 },
+        "categoryId": { "type": "number" },
+        "governorateId": { "type": "number" },
+        "districtId": { "type": "number" },
+        "locationText": { "type": "string", "maxLength": 255 },
+        "latitude": { "type": "string" },
+        "longitude": { "type": "string" },
+        "incidentDate": { "type": "string" },
+        "brand": { "type": "string", "maxLength": 100 },
+        "color": { "type": "string", "maxLength": 50 },
+        "keywords": { "type": "array" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "type", "title", "description", "categoryId", "governorateId"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "User",
+      "description": "User profile records indexed by auth UID"
+    },
+    "/reports/{reportId}": {
+      "schema": "Report",
+      "description": "All public lost and found reports"
+    }
+  }
+}

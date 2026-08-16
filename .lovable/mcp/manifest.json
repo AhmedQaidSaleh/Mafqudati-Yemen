@@ -1,0 +1,253 @@
+{
+  "version": 1,
+  "sdk_version": "0.26.2",
+  "path": "/mcp",
+  "auth": {
+    "type": "oauth",
+    "issuer": "https://atwtdekpsirsgerjoead.supabase.co/auth/v1",
+    "accepted_audiences": ["authenticated"]
+  },
+  "mcp": {
+    "server": {
+      "name": "mafqudati-bridging-what-s-lost",
+      "version": "0.1.0",
+      "title": "Mafqudati: Bridging What's Lost"
+    },
+    "tools": [
+      {
+        "name": "search_reports",
+        "title": "Search lost & found reports",
+        "description": "Search Mafqudati lost/found reports by keyword, type, governorate or category. Returns the most recent matches.",
+        "annotations": {
+          "readOnlyHint": true,
+          "idempotentHint": true,
+          "openWorldHint": false
+        },
+        "inputSchema": {
+          "$schema": "http://json-schema.org/draft-07/schema#",
+          "type": "object",
+          "properties": {
+            "query": {
+              "description": "Free text matched against title and description (Arabic or English).",
+              "type": "string"
+            },
+            "type": {
+              "description": "Report type: lost or found.",
+              "type": "string",
+              "enum": ["lost", "found"]
+            },
+            "governorate": {
+              "description": "Arabic governorate name, e.g. صنعاء.",
+              "type": "string"
+            },
+            "category": {
+              "description": "Arabic category name or slug.",
+              "type": "string"
+            },
+            "limit": {
+              "description": "Max results (default 20).",
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 50
+            }
+          }
+        },
+        "outputSchema": null
+      },
+      {
+        "name": "get_report",
+        "title": "Get report details",
+        "description": "Fetch a single Mafqudati report by its id, including category, governorate and images.",
+        "annotations": {
+          "readOnlyHint": true,
+          "idempotentHint": true,
+          "openWorldHint": false
+        },
+        "inputSchema": {
+          "$schema": "http://json-schema.org/draft-07/schema#",
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+              "description": "Report id (UUID)."
+            }
+          },
+          "required": ["id"]
+        },
+        "outputSchema": null
+      },
+      {
+        "name": "list_taxonomy",
+        "title": "List categories and governorates",
+        "description": "List Mafqudati item categories and Yemen governorates with their ids. Use before creating a report to pick valid ids.",
+        "annotations": {
+          "readOnlyHint": true,
+          "idempotentHint": true,
+          "openWorldHint": false
+        },
+        "inputSchema": {
+          "$schema": "http://json-schema.org/draft-07/schema#",
+          "type": "object",
+          "properties": {}
+        },
+        "outputSchema": null
+      },
+      {
+        "name": "create_report",
+        "title": "Create a report",
+        "description": "Create a new lost or found report for the signed-in Mafqudati user. Use list_taxonomy first to resolve category and governorate ids.",
+        "annotations": {
+          "readOnlyHint": false,
+          "destructiveHint": false,
+          "openWorldHint": false
+        },
+        "inputSchema": {
+          "$schema": "http://json-schema.org/draft-07/schema#",
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "enum": ["lost", "found"],
+              "description": "lost = مفقود, found = معثور."
+            },
+            "title": {
+              "type": "string",
+              "minLength": 3,
+              "maxLength": 120,
+              "description": "Short Arabic title."
+            },
+            "description": {
+              "type": "string",
+              "minLength": 10,
+              "maxLength": 2000,
+              "description": "Detailed Arabic description."
+            },
+            "category_id": {
+              "description": "Category id from list_taxonomy.",
+              "type": "integer",
+              "minimum": -9007199254740991,
+              "maximum": 9007199254740991
+            },
+            "governorate_id": {
+              "description": "Governorate id from list_taxonomy.",
+              "type": "integer",
+              "minimum": -9007199254740991,
+              "maximum": 9007199254740991
+            },
+            "city": {
+              "type": "string",
+              "maxLength": 120
+            },
+            "neighborhood": {
+              "type": "string",
+              "maxLength": 120
+            },
+            "color": {
+              "type": "string",
+              "maxLength": 60
+            },
+            "brand": {
+              "type": "string",
+              "maxLength": 60
+            },
+            "keywords": {
+              "maxItems": 10,
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1
+              }
+            },
+            "incident_date": {
+              "description": "YYYY-MM-DD.",
+              "type": "string",
+              "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+            },
+            "notes": {
+              "type": "string",
+              "maxLength": 1000
+            }
+          },
+          "required": ["type", "title", "description"]
+        },
+        "outputSchema": null
+      },
+      {
+        "name": "list_my_reports",
+        "title": "List my reports",
+        "description": "List the reports created by the signed-in Mafqudati user, newest first.",
+        "annotations": {
+          "readOnlyHint": true,
+          "idempotentHint": true,
+          "openWorldHint": false
+        },
+        "inputSchema": {
+          "$schema": "http://json-schema.org/draft-07/schema#",
+          "type": "object",
+          "properties": {
+            "status": {
+              "description": "Optional status filter.",
+              "type": "string",
+              "enum": [
+                "new",
+                "searching",
+                "contacted",
+                "verified",
+                "received",
+                "resolved",
+                "closed"
+              ]
+            },
+            "limit": {
+              "description": "Max results (default 20).",
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 50
+            }
+          }
+        },
+        "outputSchema": null
+      },
+      {
+        "name": "update_report_status",
+        "title": "Update report status",
+        "description": "Change the status of a report owned by the signed-in Mafqudati user.",
+        "annotations": {
+          "readOnlyHint": false,
+          "destructiveHint": true,
+          "idempotentHint": true,
+          "openWorldHint": false
+        },
+        "inputSchema": {
+          "$schema": "http://json-schema.org/draft-07/schema#",
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+              "description": "Report id (UUID)."
+            },
+            "status": {
+              "type": "string",
+              "enum": [
+                "new",
+                "searching",
+                "contacted",
+                "verified",
+                "received",
+                "resolved",
+                "closed"
+              ],
+              "description": "New status."
+            }
+          },
+          "required": ["id", "status"]
+        },
+        "outputSchema": null
+      }
+    ]
+  }
+}

@@ -1,0 +1,502 @@
+openapi: 3.0.0
+info:
+  title: Mafqudati API
+  version: 1.0.0
+  description: API documentation for the Mafqudati application backend.
+servers:
+  - url: /api
+    description: Base API path
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  schemas:
+    User:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        firebase_uid:
+          type: string
+        email:
+          type: string
+          format: email
+        full_name:
+          type: string
+        phone:
+          type: string
+          nullable: true
+        avatar_url:
+          type: string
+          nullable: true
+        role:
+          type: string
+          enum: [USER, ADMIN]
+        created_at:
+          type: string
+          format: date-time
+    Report:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        user_id:
+          type: string
+          format: uuid
+        type:
+          type: string
+          enum: [lost, found]
+        title:
+          type: string
+        description:
+          type: string
+        category_id:
+          type: integer
+        governorate_id:
+          type: integer
+        district_id:
+          type: integer
+        incident_date:
+          type: string
+          format: date-time
+          nullable: true
+        status:
+          type: string
+          enum: [active, resolved, closed]
+        location_lat:
+          type: number
+          nullable: true
+        location_lng:
+          type: number
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+    Message:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        report_id:
+          type: string
+          format: uuid
+        sender_id:
+          type: string
+          format: uuid
+        receiver_id:
+          type: string
+          format: uuid
+        body:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+    Notification:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        user_id:
+          type: string
+          format: uuid
+        title:
+          type: string
+        body:
+          type: string
+        link:
+          type: string
+          nullable: true
+        read_at:
+          type: string
+          format: date-time
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+    Error:
+      type: object
+      properties:
+        error:
+          type: string
+paths:
+  /health:
+    get:
+      summary: Health check
+      description: Returns the health status of the API and its dependent services.
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                  timestamp:
+                    type: string
+                  services:
+                    type: object
+  /auth/sync:
+    post:
+      summary: Synchronize Firebase Auth with Backend
+      description: Verifies Firebase ID token and creates or updates the user in the database.
+      security:
+        - bearerAuth: []
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                email:
+                  type: string
+                full_name:
+                  type: string
+                phone:
+                  type: string
+      responses:
+        "200":
+          description: User object
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+        "401":
+          description: Unauthorized
+  /auth/me:
+    get:
+      summary: Get current user profile
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: User object
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+        "404":
+          description: User not found
+  /meta/governorates:
+    get:
+      summary: List all governorates
+      responses:
+        "200":
+          description: Array of governorates
+  /meta/districts:
+    get:
+      summary: List districts
+      parameters:
+        - in: query
+          name: governorate_id
+          schema:
+            type: integer
+          description: Optional governorate ID to filter districts
+      responses:
+        "200":
+          description: Array of districts
+  /meta/categories:
+    get:
+      summary: List all categories
+      responses:
+        "200":
+          description: Array of categories
+  /reports:
+    get:
+      summary: Get a list of reports
+      parameters:
+        - in: query
+          name: status
+          schema:
+            type: string
+            enum: [active, resolved, closed]
+        - in: query
+          name: type
+          schema:
+            type: string
+            enum: [lost, found]
+        - in: query
+          name: category_id
+          schema:
+            type: integer
+        - in: query
+          name: governorate_id
+          schema:
+            type: integer
+        - in: query
+          name: district_id
+          schema:
+            type: integer
+        - in: query
+          name: dateFrom
+          schema:
+            type: string
+            format: date
+        - in: query
+          name: dateTo
+          schema:
+            type: string
+            format: date
+        - in: query
+          name: keyword
+          schema:
+            type: string
+        - in: query
+          name: limit
+          schema:
+            type: integer
+        - in: query
+          name: sort
+          schema:
+            type: string
+            enum: [newest, oldest]
+      responses:
+        "200":
+          description: List of reports
+    post:
+      summary: Create a new report
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                type:
+                  type: string
+                title:
+                  type: string
+                description:
+                  type: string
+                category_id:
+                  type: integer
+                governorate_id:
+                  type: integer
+                images:
+                  type: array
+                  items:
+                    type: object
+      responses:
+        "201":
+          description: Report created
+  "/reports/{id}":
+    get:
+      summary: Get a report by ID
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Report object
+        "404":
+          description: Not found
+    patch:
+      summary: Update a report
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        "200":
+          description: Success
+    delete:
+      summary: Delete a report
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Success
+  /saved-reports:
+    get:
+      summary: Get user's saved reports
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Array of reports
+    post:
+      summary: Save a report
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                report_id:
+                  type: string
+                  format: uuid
+      responses:
+        "200":
+          description: Success
+  "/saved-reports/{reportId}":
+    delete:
+      summary: Unsave a report
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: reportId
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Success
+  /messages:
+    post:
+      summary: Send a message
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                report_id:
+                  type: string
+                receiver_id:
+                  type: string
+                body:
+                  type: string
+      responses:
+        "201":
+          description: Message sent
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Message"
+  "/messages/{reportId}":
+    get:
+      summary: Get messages for a report
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: reportId
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Array of messages
+  /notifications:
+    get:
+      summary: Get user notifications
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Array of notifications
+  /notifications/read:
+    patch:
+      summary: Mark notifications as read
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                ids:
+                  type: array
+                  items:
+                    type: string
+      responses:
+        "200":
+          description: Success
+  /ai/search-score:
+    post:
+      summary: Score candidate reports based on description using AI
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                description:
+                  type: string
+                type:
+                  type: string
+                governorate:
+                  type: string
+                category:
+                  type: string
+                candidates:
+                  type: array
+                  items:
+                    type: object
+      responses:
+        "200":
+          description: Scoring results
+  /uploads:
+    post:
+      summary: Upload a file
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                file:
+                  type: string
+                  format: binary
+      responses:
+        "200":
+          description: Upload success
+  /admin/stats:
+    get:
+      summary: Get application statistics
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Statistics
+  /admin/users:
+    get:
+      summary: Get all users
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Array of users
