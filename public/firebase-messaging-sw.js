@@ -1,9 +1,9 @@
 importScripts('https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js');
 importScripts('https://www.gstatic.com/firebasejs/10.7.1/firebase-messaging-compat.js');
 
-// Config from firebase-applet-config or fallback
+// Initialize Firebase in the service worker with official config
 firebase.initializeApp({
-  apiKey: "AIzaSyDummyKeyForDevEnvironment12345678",
+  apiKey: "AIzaSyC-nhme-YmCBu8HRY4SnB5Pk5X3nGlwEhk",
   authDomain: "mafqudati-d3b18.firebaseapp.com",
   projectId: "mafqudati-d3b18",
   storageBucket: "mafqudati-d3b18.firebasestorage.app",
@@ -13,31 +13,57 @@ firebase.initializeApp({
 
 const messaging = firebase.messaging();
 
-messaging.onBackgroundMessage(function(payload) {
-  const notificationTitle = payload.notification.title;
+// Handle background messages
+messaging.onBackgroundMessage((payload) => {
+  console.log('[firebase-messaging-sw.js] Received background message: ', payload);
+
+  const title = payload.notification?.title || payload.data?.title || 'منصة مفقوداتي';
+  const body = payload.notification?.body || payload.data?.body || 'لديك إشعار جديد في منصة مفقوداتي.';
+  const icon = payload.notification?.icon || payload.data?.icon || '/logo.png';
+  const targetUrl = payload.data?.url || payload.notification?.click_action || '/notifications';
+
   const notificationOptions = {
-    body: payload.notification.body,
-    icon: '/favicon.ico',
-    data: payload.data
+    body: body,
+    icon: icon,
+    badge: '/favicon.ico',
+    tag: payload.data?.tag || 'mafqudati-alert-' + Date.now(),
+    renotify: true,
+    data: {
+      url: targetUrl,
+      ...payload.data
+    },
+    actions: [
+      { action: 'open', title: 'عرض التفاصيل' },
+      { action: 'dismiss', title: 'إغلاق' }
+    ]
   };
 
-  self.registration.showNotification(notificationTitle, notificationOptions);
+  return self.registration.showNotification(title, notificationOptions);
 });
 
-self.addEventListener('notificationclick', function(event) {
+// Handle clicking on notification
+self.addEventListener('notificationclick', (event) => {
   event.notification.close();
-  const url = event.notification.data?.url || '/';
+
+  if (event.action === 'dismiss') {
+    return;
+  }
+
+  const targetUrl = event.notification.data?.url || '/notifications';
+
   event.waitUntil(
-    clients.matchAll({ type: 'window' }).then(windowClients => {
-      for (var i = 0; i < windowClients.length; i++) {
-        var client = windowClients[i];
-        if (client.url.includes(self.location.origin) && 'focus' in client) {
-          client.navigate(url);
+    clients.matchAll({ type: 'window', includeUncontrolled: true }).then((windowClients) => {
+      // Check if there is already an open tab with our origin
+      for (let i = 0; i < windowClients.length; i++) {
+        const client = windowClients[i];
+        if (client.url.startsWith(self.location.origin) && 'focus' in client) {
+          client.navigate(targetUrl);
           return client.focus();
         }
       }
+      // If no tab is open, open a new window
       if (clients.openWindow) {
-        return clients.openWindow(url);
+        return clients.openWindow(targetUrl);
       }
     })
   );

@@ -1,4 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
+import { formatDistanceToNow } from "date-fns";
+import { arSA } from "date-fns/locale";
 import {
   Search,
   Plus,
@@ -22,8 +24,15 @@ import {
   MessageCircle,
   ChevronDown,
   ArrowUpLeft,
+  Briefcase,
+  Watch,
+  Car,
+  Dog,
+  Package,
 } from "lucide-react";
 import { Suspense, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { api } from "@/client/api/client";
 import heroImg from "@/assets/hero.png";
 import { SmartAiSearch } from "@/components/home/SmartAiSearch";
 
@@ -50,33 +59,9 @@ export const Route = createFileRoute("/")({
   component: HomePage,
 });
 
-const stats = [
-  { icon: Users, value: "25,430+", label: "مستخدم نشط" },
-  { icon: FileText, value: "12,840+", label: "بلاغ مفقود" },
-  { icon: CheckCircle2, value: "8,920+", label: "بلاغ معثور" },
-  { icon: Star, value: "6,720+", label: "عمليات استعادة ناجحة" },
-];
+// Dynamic stats loaded in StatsBar
 
-const categories = [
-  { icon: Laptop, name: "إلكترونيات", count: "2,430", tint: "bg-cat-1", color: "text-primary" },
-  {
-    icon: Wallet,
-    name: "محافظ ونقود",
-    count: "1,920",
-    tint: "bg-cat-2",
-    color: "text-emerald-700",
-  },
-  { icon: Key, name: "مفاتيح", count: "1,580", tint: "bg-cat-3", color: "text-amber-700" },
-  {
-    icon: FileBadge,
-    name: "وثائق رسمية",
-    count: "1,240",
-    tint: "bg-cat-4",
-    color: "text-purple-700",
-  },
-  { icon: ShoppingBag, name: "حقائب", count: "1,120", tint: "bg-cat-5", color: "text-rose-700" },
-  { icon: HelpCircle, name: "أخرى", count: "4,550", tint: "bg-cat-6", color: "text-slate-700" },
-];
+
 
 const latestLost = [
   { title: "هاتف آيفون 14 برو", location: "صنعاء - حدة", time: "منذ 2 ساعة" },
@@ -177,17 +162,17 @@ function HomePage() {
       <Hero />
       <Suspense
         fallback={
-          <div className="mx-auto mt-16 max-w-7xl px-4 sm:px-6 lg:px-8">
+          <div className="relative z-10 mx-auto -mt-6 sm:-mt-10 lg:-mt-14 max-w-7xl px-4 sm:px-6 lg:px-8">
             <div className="card-soft h-96 rounded-3xl animate-pulse" />
           </div>
         }
       >
         <SmartAiSearch />
       </Suspense>
+      <YemenMap />
       <StatsBar />
       <CategoriesAndLatest />
       <HowItWorks />
-      <YemenMap />
       <Stories />
       <FAQ />
       <CtaBanner />
@@ -263,10 +248,23 @@ function Hero() {
 }
 
 function StatsBar() {
+  const { data } = useQuery({
+    queryKey: ["app-stats"],
+    queryFn: () =>
+      api.get<{ users: number; lost: number; found: number; resolved: number }>("/meta/stats"),
+  });
+
+  const displayStats = [
+    { icon: Users, value: data ? data.users.toLocaleString() : "...", label: "مستخدم نشط" },
+    { icon: FileText, value: data ? data.lost.toLocaleString() : "...", label: "بلاغ مفقود" },
+    { icon: CheckCircle2, value: data ? data.found.toLocaleString() : "...", label: "بلاغ معثور" },
+    { icon: Star, value: data ? data.resolved.toLocaleString() : "...", label: "عمليات استعادة ناجحة" },
+  ];
+
   return (
-    <section className="mx-auto -mt-6 max-w-7xl px-4 sm:px-6 lg:px-8">
+    <section className="mx-auto mt-10 sm:mt-12 max-w-7xl px-4 sm:px-6 lg:px-8">
       <div className="card-soft grid grid-cols-2 gap-4 rounded-3xl p-6 sm:p-8 md:grid-cols-4">
-        {stats.map((s) => (
+        {displayStats.map((s) => (
           <div key={s.label} className="flex items-center gap-4">
             <div className="inline-flex size-12 items-center justify-center rounded-2xl bg-secondary text-primary">
               <s.icon className="size-5" />
@@ -283,6 +281,79 @@ function StatsBar() {
 }
 
 function CategoriesAndLatest() {
+  const { data: dbCategories } = useQuery({
+    queryKey: ["app-categories-counts"],
+    queryFn: () =>
+      api.get<
+        {
+          id: number;
+          slug: string;
+          name_ar: string;
+          icon: string;
+          report_count?: number;
+        }[]
+      >("/meta/categories"),
+  });
+
+  const { data: latestLostData } = useQuery({
+    queryKey: ["latest-reports", "lost"],
+    queryFn: () => api.get<any[]>("/reports?limit=3&type=lost"),
+  });
+
+  const { data: latestFoundData } = useQuery({
+    queryKey: ["latest-reports", "found"],
+    queryFn: () => api.get<any[]>("/reports?limit=3&type=found"),
+  });
+
+  const iconMap: Record<string, any> = {
+    Laptop,
+    FileText,
+    Briefcase,
+    Key,
+    Watch,
+    Car,
+    Dog,
+    Package,
+    Wallet,
+    FileBadge,
+    ShoppingBag,
+    HelpCircle,
+  };
+
+  const tints = [
+    { tint: "bg-cat-1", color: "text-primary" },
+    { tint: "bg-cat-2", color: "text-emerald-700" },
+    { tint: "bg-cat-3", color: "text-amber-700" },
+    { tint: "bg-cat-4", color: "text-purple-700" },
+    { tint: "bg-cat-5", color: "text-rose-700" },
+    { tint: "bg-cat-6", color: "text-cyan-700" },
+  ];
+
+  // Merge db categories with aesthetic styling
+  const displayCategories = (dbCategories || []).slice(0, 6).map((c, i) => {
+    const Icon = iconMap[c.icon] || HelpCircle;
+    const style = tints[i % tints.length];
+    return {
+      ...c,
+      iconComponent: Icon,
+      count: c.report_count ? c.report_count.toLocaleString() : "0",
+      tint: style.tint,
+      color: style.color,
+    };
+  });
+
+  // Map API response to UI shape
+  const mapReport = (r: any) => ({
+    id: r.id,
+    title: r.title,
+    location: `${r.governorates?.name_ar || ""} ${r.districts?.name_ar ? `- ${r.districts.name_ar}` : ""}`.trim() || "غير محدد",
+    time: r.created_at, // We'll format this inside ReportList
+    image: r.report_images?.[0]?.url || null,
+  });
+
+  const displayLatestLost = (latestLostData || []).map(mapReport);
+  const displayLatestFound = (latestFoundData || []).map(mapReport);
+
   return (
     <section className="mx-auto mt-12 grid max-w-7xl gap-6 px-4 sm:px-6 lg:grid-cols-2 lg:px-8">
       {/* Categories */}
@@ -299,19 +370,19 @@ function CategoriesAndLatest() {
           </Link>
         </div>
         <div className="mt-6 grid grid-cols-2 gap-4 sm:grid-cols-3">
-          {categories.map((c) => (
+          {displayCategories.map((c) => (
             <Link
-              key={c.name}
+              key={c.id}
               to="/lost"
               className="group relative flex flex-col items-start gap-3 overflow-hidden rounded-2xl border border-border bg-background p-5 transition duration-300 hover:-translate-y-1 hover:border-primary/40 hover:shadow-elevated"
             >
               <div
                 className={`inline-flex size-14 items-center justify-center rounded-2xl ${c.tint} ${c.color} shadow-sm transition duration-300 group-hover:scale-110 group-hover:rotate-3`}
               >
-                <c.icon className="size-7" />
+                <c.iconComponent className="size-7" />
               </div>
               <div className="flex-1">
-                <div className="text-sm font-extrabold text-primary-dark">{c.name}</div>
+                <div className="text-sm font-extrabold text-primary-dark">{c.name_ar}</div>
                 <div className="mt-0.5 text-[11px] text-muted-foreground">{c.count} بلاغ</div>
               </div>
               <ArrowUpLeft className="absolute end-4 top-4 size-4 text-primary/0 transition-all duration-300 group-hover:text-primary" />
@@ -322,8 +393,8 @@ function CategoriesAndLatest() {
 
       {/* Latest lost + latest found stacked to fit visual density */}
       <div className="grid gap-6 sm:grid-cols-2">
-        <ReportList title="أحدث المفقودات" items={latestLost} to="/lost" tone="text-destructive" />
-        <ReportList title="أحدث المعثورات" items={latestFound} to="/found" tone="text-primary" />
+        <ReportList title="أحدث المفقودات" items={displayLatestLost} to="/lost" tone="text-destructive" />
+        <ReportList title="أحدث المعثورات" items={displayLatestFound} to="/found" tone="text-primary" />
       </div>
     </section>
   );
@@ -336,7 +407,7 @@ function ReportList({
   tone,
 }: {
   title: string;
-  items: typeof latestLost;
+  items: { id: string; title: string; location: string; time: string; image?: string }[];
   to: string;
   tone: string;
 }) {
@@ -350,15 +421,23 @@ function ReportList({
       </div>
       <ul className="mt-4 divide-y divide-border">
         {items.map((it) => (
-          <li key={it.title} className="flex items-center gap-3 py-3">
-            <div className="size-12 shrink-0 rounded-xl bg-secondary flex items-center justify-center text-primary">
-              <Camera className="size-5" />
-            </div>
-            <div className="flex-1 min-w-0">
-              <div className="text-sm font-bold text-primary-dark truncate">{it.title}</div>
-              <div className="text-xs text-muted-foreground">{it.location}</div>
-            </div>
-            <div className="text-[11px] text-muted-foreground shrink-0">{it.time}</div>
+          <li key={it.id} className="py-3">
+            <Link to={"/report/$id"} params={{ id: it.id }} className="flex items-center gap-3 group">
+              <div className="size-12 shrink-0 rounded-xl bg-secondary flex items-center justify-center text-primary overflow-hidden">
+                {it.image ? (
+                  <img src={it.image} alt={it.title} className="w-full h-full object-cover transition-transform group-hover:scale-110" />
+                ) : (
+                  <Camera className="size-5 transition-transform group-hover:scale-110" />
+                )}
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="text-sm font-bold text-primary-dark truncate group-hover:text-primary transition-colors">{it.title}</div>
+                <div className="text-xs text-muted-foreground">{it.location}</div>
+              </div>
+              <div className="text-[11px] text-muted-foreground shrink-0" dir="ltr">
+                {formatDistanceToNow(new Date(it.time), { addSuffix: true, locale: arSA })}
+              </div>
+            </Link>
           </li>
         ))}
       </ul>

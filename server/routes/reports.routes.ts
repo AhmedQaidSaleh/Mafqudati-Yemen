@@ -1,8 +1,12 @@
 import { Router } from "express";
 import { db } from "../db";
 import { reports, reportImages } from "../db/schema";
-import { requireAuth, AuthenticatedRequest } from "../middleware/auth.middleware";
+import { requireAuth, requireNotRestricted, AuthenticatedRequest } from "../middleware/auth.middleware";
 import { eq, desc, asc, and, or, ilike, inArray, gte, lte, SQL } from "drizzle-orm";
+import {
+  notifyReportStatusChange,
+  triggerAutoMatchingForReport,
+} from "../services/notification.service";
 
 const router = Router();
 
@@ -211,7 +215,7 @@ type ReportImageData = {
   sort_order?: number;
 };
 
-router.post("/", requireAuth, async (req: AuthenticatedRequest, res) => {
+router.post("/", requireAuth, requireNotRestricted, async (req: AuthenticatedRequest, res) => {
   try {
     if (!db || !req.user) return res.status(500).json({ error: "Not configured" });
     const { images, ...reportData } = req.body as {
@@ -241,6 +245,11 @@ router.post("/", requireAuth, async (req: AuthenticatedRequest, res) => {
       );
     }
 
+    // Trigger AI & keyword matching notification in the background
+    triggerAutoMatchingForReport(newReport.id).catch((matchErr) =>
+      console.warn("triggerAutoMatchingForReport error:", matchErr)
+    );
+
     res.status(201).json(newReport);
   } catch (error) {
     console.error("Create report error:", error);
@@ -258,7 +267,7 @@ router.patch("/:id", requireAuth, async (req: AuthenticatedRequest, res) => {
     };
     const reportId = id as string;
     const existing = await db
-      .select({ user_id: reports.user_id })
+      .select({ user_id: reports.user_id, status: reports.status })
       .from(reports)
       .where(eq(reports.id, reportId))
       .limit(1);
@@ -275,6 +284,19 @@ router.patch("/:id", requireAuth, async (req: AuthenticatedRequest, res) => {
           updated_at: new Date(),
         })
         .where(eq(reports.id, reportId));
+
+      // If status changed, send notification
+      if (
+        reportData.status &&
+        typeof reportData.status === "string" &&
+        reportData.status !== existing[0].status
+      ) {
+        notifyReportStatusChange({
+          reportId,
+          newStatus: reportData.status as "active" | "resolved" | "closed",
+          actorUserId: req.user.id,
+        }).catch((err) => console.warn("notifyReportStatusChange error:", err));
+      }
     }
 
     if (images !== undefined) {

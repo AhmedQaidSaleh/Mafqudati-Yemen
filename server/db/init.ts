@@ -1,18 +1,15 @@
-import { PGlite } from "@electric-sql/pglite";
 import { YEMEN_GOVERNORATES, YEMEN_DISTRICTS, DEFAULT_CATEGORIES } from "../data/yemen-geo";
 
 interface DatabaseQueryable {
   query: (sql: string, params?: unknown[]) => Promise<unknown>;
 }
 
-export async function initializeDatabaseSchema(client: PGlite | DatabaseQueryable) {
+export async function initializeDatabaseSchema(client: DatabaseQueryable) {
   try {
     // 1. Create Enums if not exist
-    await client.query(`CREATE TYPE "role" AS ENUM ('USER', 'ADMIN');`).catch(e => { /* ignore */ });
-
-    await client.query(`CREATE TYPE "report_type" AS ENUM ('lost', 'found');`).catch(e => { /* ignore */ });
-
-    await client.query(`CREATE TYPE "report_status" AS ENUM ('active', 'resolved', 'closed');`).catch(e => { /* ignore */ });
+    await client.query(`CREATE TYPE "role" AS ENUM ('USER', 'ADMIN');`).catch(() => { /* ignore */ });
+    await client.query(`CREATE TYPE "report_type" AS ENUM ('lost', 'found');`).catch(() => { /* ignore */ });
+    await client.query(`CREATE TYPE "report_status" AS ENUM ('active', 'resolved', 'closed');`).catch(() => { /* ignore */ });
 
     // 2. Create Tables
     await client.query(`
@@ -29,6 +26,7 @@ export async function initializeDatabaseSchema(client: PGlite | DatabaseQueryabl
         "updated_at" timestamp NOT NULL DEFAULT now()
       );
       ALTER TABLE "users" ADD COLUMN IF NOT EXISTS "fcm_token" text;
+      ALTER TABLE "users" ADD COLUMN IF NOT EXISTS "is_restricted" boolean NOT NULL DEFAULT false;
       ALTER TABLE "reports" ADD COLUMN IF NOT EXISTS "notes" text;
       ALTER TABLE "reports" ADD COLUMN IF NOT EXISTS "contact_preference" varchar(50) DEFAULT 'in_app';
     `);
@@ -130,28 +128,69 @@ export async function initializeDatabaseSchema(client: PGlite | DatabaseQueryabl
       );
     `);
 
-    // 3. Seed Governorates
-    for (const gov of YEMEN_GOVERNORATES) {
-      await client.query(
-        `INSERT INTO "governorates" (id, name_ar, name_en) VALUES ($1, $2, $3) ON CONFLICT (id) DO NOTHING`,
-        [gov.id, gov.name_ar, gov.name_en],
-      );
+    // 3. Seed Governorates (Batch check and multi-row insert)
+    const govCheck = (await client.query(`SELECT COUNT(*) as count FROM "governorates"`).catch(() => ({ rows: [] }))) as any;
+    const govCount = Number(govCheck?.rows?.[0]?.count || 0);
+
+    if (govCount === 0) {
+      const govValues: any[] = [];
+      const govPlaceholders: string[] = [];
+      YEMEN_GOVERNORATES.forEach((gov, idx) => {
+        const offset = idx * 3;
+        govPlaceholders.push(`($${offset + 1}, $${offset + 2}, $${offset + 3})`);
+        govValues.push(gov.id, gov.name_ar, gov.name_en);
+      });
+
+      if (govPlaceholders.length > 0) {
+        await client.query(
+          `INSERT INTO "governorates" (id, name_ar, name_en) VALUES ${govPlaceholders.join(", ")} ON CONFLICT (id) DO NOTHING`,
+          govValues
+        );
+      }
     }
 
-    // 4. Seed Districts
-    for (const dist of YEMEN_DISTRICTS) {
-      await client.query(
-        `INSERT INTO "districts" (id, governorate_id, name_ar, name_en) VALUES ($1, $2, $3, $4) ON CONFLICT (id) DO NOTHING`,
-        [dist.id, dist.governorate_id, dist.name_ar, dist.name_en],
-      );
+    // 4. Seed Districts (Batch check and multi-row chunked inserts)
+    const distCheck = (await client.query(`SELECT COUNT(*) as count FROM "districts"`).catch(() => ({ rows: [] }))) as any;
+    const distCount = Number(distCheck?.rows?.[0]?.count || 0);
+
+    if (distCount === 0) {
+      const chunkSize = 50;
+      for (let i = 0; i < YEMEN_DISTRICTS.length; i += chunkSize) {
+        const chunk = YEMEN_DISTRICTS.slice(i, i + chunkSize);
+        const distValues: any[] = [];
+        const distPlaceholders: string[] = [];
+        chunk.forEach((dist, idx) => {
+          const offset = idx * 4;
+          distPlaceholders.push(`($${offset + 1}, $${offset + 2}, $${offset + 3}, $${offset + 4})`);
+          distValues.push(dist.id, dist.governorate_id, dist.name_ar, dist.name_en);
+        });
+
+        await client.query(
+          `INSERT INTO "districts" (id, governorate_id, name_ar, name_en) VALUES ${distPlaceholders.join(", ")} ON CONFLICT (id) DO NOTHING`,
+          distValues
+        );
+      }
     }
 
-    // 5. Seed Categories
-    for (const cat of DEFAULT_CATEGORIES) {
-      await client.query(
-        `INSERT INTO "categories" (id, slug, name_ar, name_en, icon) VALUES ($1, $2, $3, $4, $5) ON CONFLICT (id) DO NOTHING`,
-        [cat.id, cat.slug, cat.name_ar, cat.name_en, cat.icon || "Package"],
-      );
+    // 5. Seed Categories (Batch check and multi-row insert)
+    const catCheck = (await client.query(`SELECT COUNT(*) as count FROM "categories"`).catch(() => ({ rows: [] }))) as any;
+    const catCount = Number(catCheck?.rows?.[0]?.count || 0);
+
+    if (catCount === 0) {
+      const catValues: any[] = [];
+      const catPlaceholders: string[] = [];
+      DEFAULT_CATEGORIES.forEach((cat, idx) => {
+        const offset = idx * 5;
+        catPlaceholders.push(`($${offset + 1}, $${offset + 2}, $${offset + 3}, $${offset + 4}, $${offset + 5})`);
+        catValues.push(cat.id, cat.slug, cat.name_ar, cat.name_en, cat.icon || "Package");
+      });
+
+      if (catPlaceholders.length > 0) {
+        await client.query(
+          `INSERT INTO "categories" (id, slug, name_ar, name_en, icon) VALUES ${catPlaceholders.join(", ")} ON CONFLICT (id) DO NOTHING`,
+          catValues
+        );
+      }
     }
 
     console.log("Database schema and Yemen geo seed data initialized successfully.");

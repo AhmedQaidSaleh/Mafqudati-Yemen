@@ -2,7 +2,7 @@
 @source "../src";
 @import "tw-animate-css";
 
-@custom-variant dark (&:is(.dark *));
+@custom-variant dark (&:where(.dark, .dark *));
 
 @theme inline {
   --font-sans: "Cairo", ui-sans-serif, system-ui, sans-serif;
@@ -82,6 +82,38 @@
   --shadow-soft: 0 8px 30px -12px oklch(0.55 0.2 260 / 0.18);
   --shadow-card: 0 2px 20px -8px oklch(0.55 0.2 260 / 0.12);
   --shadow-elevated: 0 20px 60px -20px oklch(0.55 0.2 260 / 0.25);
+}
+
+.dark {
+  --background: oklch(0.16 0.03 260);
+  --foreground: oklch(0.96 0.01 250);
+  --card: oklch(0.20 0.035 260);
+  --card-foreground: oklch(0.96 0.01 250);
+  --popover: oklch(0.20 0.035 260);
+  --popover-foreground: oklch(0.96 0.01 250);
+  --primary: oklch(0.65 0.19 255);
+  --primary-foreground: oklch(0.99 0 0);
+  --primary-light: oklch(0.75 0.14 250);
+  --primary-dark: oklch(0.88 0.08 255);
+  --secondary: oklch(0.24 0.03 260);
+  --secondary-foreground: oklch(0.88 0.04 250);
+  --muted: oklch(0.23 0.025 260);
+  --muted-foreground: oklch(0.70 0.03 260);
+  --accent: oklch(0.28 0.04 260);
+  --accent-foreground: oklch(0.92 0.03 250);
+  --destructive: oklch(0.65 0.22 25);
+  --destructive-foreground: oklch(0.99 0 0);
+  --border: oklch(0.28 0.03 260);
+  --input: oklch(0.28 0.03 260);
+  --ring: oklch(0.65 0.19 255);
+  --surface: oklch(0.18 0.03 260);
+  --surface-soft: oklch(0.22 0.03 260);
+
+  --gradient-hero: radial-gradient(ellipse at 70% 30%, oklch(0.26 0.06 250 / 0.8), transparent 60%);
+  --gradient-primary: linear-gradient(135deg, oklch(0.60 0.2 255), oklch(0.50 0.18 265));
+  --shadow-soft: 0 8px 30px -12px oklch(0 0 0 / 0.5);
+  --shadow-card: 0 2px 20px -8px oklch(0 0 0 / 0.4);
+  --shadow-elevated: 0 20px 60px -20px oklch(0 0 0 / 0.6);
 }
 
 @layer base {

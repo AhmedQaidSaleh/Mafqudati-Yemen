@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect } from "react";
-import { APIProvider, Map, AdvancedMarker, Pin, MapMouseEvent } from "@vis.gl/react-google-maps";
+import { APIProvider, Map, Marker, MapMouseEvent } from "@vis.gl/react-google-maps";
 import { YEMEN_CENTER } from "@/lib/yemen-geo";
 import { GOOGLE_MAPS_KEY, hasValidMapsKey } from "./GoogleMapView";
 import { Navigation, Loader2 } from "lucide-react";
@@ -63,16 +63,13 @@ export function GoogleLocationPicker({
           center={position}
           defaultZoom={lat != null ? 14 : 7}
           onClick={handleMapClick}
-          mapId="DEMO_MAP_ID"
           internalUsageAttributionIds={["gmp_mcp_codeassist_v1_aistudio"]}
           style={{ width: "100%", height: "100%" }}
           gestureHandling="greedy"
           disableDefaultUI={false}
         >
           {lat != null && lng != null && (
-            <AdvancedMarker position={{ lat, lng }}>
-              <Pin background="#0284C7" glyphColor="#FFFFFF" />
-            </AdvancedMarker>
+            <Marker position={{ lat, lng }} icon="http://maps.google.com/mapfiles/ms/icons/blue-dot.png" />
           )}
         </Map>
       </APIProvider>

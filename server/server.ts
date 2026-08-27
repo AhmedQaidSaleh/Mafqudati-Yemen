@@ -2,17 +2,30 @@ import { env } from "./config/env";
 import { createApp } from "./app";
 import { waitForDatabase } from "./db";
 import path from "path";
+import fs from "fs";
 import express from "express";
 
+function logMemory(step: string) {
+  const m = process.memoryUsage();
+  console.log(
+    `[MEMORY] ${step}: RSS=${(m.rss / 1024 / 1024).toFixed(2)}MB, HeapTotal=${(m.heapTotal / 1024 / 1024).toFixed(2)}MB, HeapUsed=${(m.heapUsed / 1024 / 1024).toFixed(2)}MB`
+  );
+}
+
+logMemory("0. Startup Begin");
+
 async function startServer() {
-  // Wait for PGLite and database schema to initialize before accepting requests
-  await waitForDatabase();
-
+  logMemory("1. Creating Express App");
   const app = createApp();
+  logMemory("2. Express App & Routes Created");
 
-  const port = 3000;
+  const PORT = Number(process.env.PORT) || 3000;
 
-  if (process.env.NODE_ENV !== "production") {
+  const distClientPath = path.join(process.cwd(), "dist/client");
+  const distServerPath = path.join(process.cwd(), "dist/server/server.js");
+  const isProd = process.env.NODE_ENV === "production" || fs.existsSync(distClientPath);
+
+  if (!isProd) {
     const { createServer: createViteServer } = await import("vite");
     const vite = await createViteServer({
       server: { middlewareMode: true },
@@ -27,7 +40,7 @@ async function startServer() {
         const handler = module.default || module;
 
         const protocol = req.protocol;
-        const host = req.get("host") || "localhost:3000";
+        const host = req.get("host") || `localhost:${PORT}`;
         const url = new URL(req.originalUrl || req.url, `${protocol}://${host}`);
 
         const headers = new Headers();
@@ -71,20 +84,25 @@ async function startServer() {
       }
     });
   } else {
-    const distPath = path.join(process.cwd(), "dist/client");
-    app.use(express.static(distPath));
+    app.use(express.static(distClientPath));
+
+    // Lazy load SSR handler only upon first non-API web request to conserve startup memory
+    let ssrHandler: any = null;
+
     app.use(async (req, res, next) => {
       if (req.path.startsWith("/api")) return next();
       try {
-        const module = await import(path.join(process.cwd(), "dist/server/server.js"));
-        const handler = module.default || module;
+        if (!ssrHandler) {
+          logMemory("SSR First Request Load (Before Import)");
+          const module = await import(distServerPath);
+          ssrHandler = module.default || module;
+          logMemory("SSR First Request Load (After Import)");
+        }
 
-        // Create full URL
         const protocol = req.protocol;
-        const host = req.get("host") || "localhost:3000";
+        const host = req.get("host") || `localhost:${PORT}`;
         const url = new URL(req.originalUrl || req.url, `${protocol}://${host}`);
 
-        // Ensure web Fetch Request format for TanStack Start SSR
         const headers = new Headers();
         for (const [key, value] of Object.entries(req.headers)) {
           if (value !== undefined) {
@@ -102,16 +120,13 @@ async function startServer() {
               : undefined,
         });
 
-        // Use fetch method as defined in src/server.ts
-        const fetchResponse = await handler.fetch(fetchRequest, process.env, {});
-
+        const fetchResponse = await ssrHandler.fetch(fetchRequest, process.env, {});
         res.status(fetchResponse.status);
         fetchResponse.headers.forEach((value: string, key: string) => {
           res.setHeader(key, value);
         });
 
         if (fetchResponse.body) {
-          // Streaming response back to express
           const reader = fetchResponse.body.getReader();
           while (true) {
             const { done, value } = await reader.read();
@@ -129,9 +144,20 @@ async function startServer() {
     });
   }
 
-  app.listen(port, "0.0.0.0", () => {
-    console.log(`Backend Foundation Server running on port ${port}`);
-    console.log(`Health check available at http://localhost:${port}/api/health`);
+  // Bind to PORT immediately so Render health check passes instantly
+  app.listen(PORT, "0.0.0.0", () => {
+    logMemory(`3. Server Listening on 0.0.0.0:${PORT}`);
+    console.log(`Backend Foundation Server running on port ${PORT}`);
+    console.log(`Health check available at http://localhost:${PORT}/api/health`);
+
+    // Complete database background sync after port is open
+    waitForDatabase()
+      .then(() => {
+        logMemory("4. Database Background Init Finished");
+      })
+      .catch((err) => {
+        console.error("Database background initialization notice:", err.message || err);
+      });
   });
 }
 
@@ -139,3 +165,4 @@ startServer().catch((error) => {
   console.error("Failed to start server:", error);
   process.exit(1);
 });
+

@@ -1,10 +1,9 @@
 import { Router } from "express";
 import { db } from "../db";
 import { messages } from "../db/schema";
-import { requireAuth, AuthenticatedRequest } from "../middleware/auth.middleware";
-import { getMessaging } from "firebase-admin/messaging";
-import { users } from "../db/schema";
+import { requireAuth, requireNotRestricted, AuthenticatedRequest } from "../middleware/auth.middleware";
 import { eq, and, or, asc, desc } from "drizzle-orm";
+import { notifyNewMessage } from "../services/notification.service";
 
 const router = Router();
 
@@ -99,7 +98,7 @@ router.get("/:reportId/:otherUserId", requireAuth, async (req: AuthenticatedRequ
   }
 });
 
-router.post("/", requireAuth, async (req: AuthenticatedRequest, res) => {
+router.post("/", requireAuth, requireNotRestricted, async (req: AuthenticatedRequest, res) => {
   try {
     if (!db || !req.user) return res.status(500).json({ error: "Not configured" });
     const { report_id, receiver_id, body } = req.body;
@@ -119,33 +118,21 @@ router.post("/", requireAuth, async (req: AuthenticatedRequest, res) => {
       .returning();
       
     // Fetch with relations to return complete object
-    
     const completeMsg = await db.query.messages.findFirst({
       where: eq(messages.id, newMsg.id),
       with: {
         sender: { columns: { id: true, full_name: true, avatar_url: true } },
-        receiver: { columns: { id: true, full_name: true, avatar_url: true, fcm_token: true } }
-      }
+        receiver: { columns: { id: true, full_name: true, avatar_url: true, fcm_token: true } },
+      },
     });
 
-    if (completeMsg?.receiver?.fcm_token) {
-      try {
-        await getMessaging().send({
-          token: completeMsg.receiver.fcm_token,
-          notification: {
-            title: `رسالة جديدة من ${completeMsg.sender.full_name}`,
-            body: completeMsg.body.length > 50 ? completeMsg.body.substring(0, 50) + "..." : completeMsg.body
-          },
-          data: {
-            url: `/chat/${report_id}/${req.user.id}`
-          }
-        });
-      } catch (fcmError) {
-        console.error("FCM Send Error:", fcmError);
-        // Don't fail the message creation if push fails
-      }
-    }
-
+    // Send in-app notification & push notification
+    notifyNewMessage({
+      senderId: req.user.id,
+      receiverId: receiver_id,
+      reportId: report_id,
+      body: newMsg.body,
+    }).catch((notifErr) => console.warn("notifyNewMessage error:", notifErr));
 
     res.status(201).json(completeMsg);
   } catch (error) {

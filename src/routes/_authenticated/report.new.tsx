@@ -302,10 +302,15 @@ function NewReport() {
 
       setNewReportId(report.id);
       setStep("success");
+      toast.success(
+        type === "lost"
+          ? "تم نشر بلاغ المفقود بنجاح! سيبدأ نظام المطابقة بالبحث فوراً."
+          : "تم نشر بلاغ المعثور عليه بنجاح! جزاك الله خيراً على أمانتك."
+      );
       // cleanup previews
       images.forEach((i) => URL.revokeObjectURL(i.url));
     } catch (e) {
-      const msg = e instanceof Error ? e.message : "فشل النشر";
+      const msg = e instanceof Error ? e.message : "فشل في إرسال البلاغ إلى الخادم";
       toast.error(msg);
     } finally {
       setPublishing(false);

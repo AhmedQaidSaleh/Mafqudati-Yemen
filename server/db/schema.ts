@@ -29,6 +29,7 @@ export const users = pgTable(
     role: roleEnum("role").default("USER").notNull(),
     avatar_url: text("avatar_url"),
     fcm_token: text("fcm_token"),
+    is_restricted: boolean("is_restricted").default(false).notNull(),
     created_at: timestamp("created_at").defaultNow().notNull(),
     updated_at: timestamp("updated_at").defaultNow().notNull(),
   },

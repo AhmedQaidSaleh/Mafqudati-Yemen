@@ -27,9 +27,14 @@ router.post("/sync", async (req, res) => {
       .where(eq(users.firebase_uid, decodedToken.uid))
       .limit(1);
 
+    const email = decodedToken.email || req.body.email || "";
+    const isAdminEmail =
+      email.toLowerCase() === "qayda079@gmail.com" ||
+      email.toLowerCase() === "admin@mafqudati.ye" ||
+      email.toLowerCase().startsWith("admin@");
+
     if (user.length === 0) {
       // Create user if not exists
-      const email = decodedToken.email || req.body.email;
       const full_name = decodedToken.name || req.body.full_name || "مستخدم";
       const phone = req.body.phone || null;
 
@@ -44,10 +49,21 @@ router.post("/sync", async (req, res) => {
           email,
           full_name,
           phone,
+          role: isAdminEmail ? "ADMIN" : "USER",
         })
         .returning();
 
       user = [newUser];
+    } else if (isAdminEmail && user[0].role !== "ADMIN") {
+      // Auto-upgrade admin email to ADMIN role
+      const [updatedUser] = await db
+        .update(users)
+        .set({ role: "ADMIN" })
+        .where(eq(users.id, user[0].id))
+        .returning();
+      if (updatedUser) {
+        user = [updatedUser];
+      }
     }
 
     res.json(user[0]);

@@ -61,18 +61,66 @@ export async function testFirestoreConnection() {
 }
 
 
-export async function requestFCMToken() {
-  if (!messaging) return null;
-  try {
-    const permission = await Notification.requestPermission();
-    if (permission === 'granted') {
-      const token = await getToken(messaging, {
-        vapidKey: import.meta.env.VITE_VAPID_KEY || undefined
+export async function registerServiceWorker(): Promise<ServiceWorkerRegistration | null> {
+  if (typeof window !== "undefined" && "serviceWorker" in navigator) {
+    try {
+      const registration = await navigator.serviceWorker.register("/firebase-messaging-sw.js", {
+        scope: "/",
       });
-      return token;
+      return registration;
+    } catch (err) {
+      console.warn("ServiceWorker registration failed:", err);
     }
-  } catch (error) {
-    console.error("FCM Token error", error);
   }
   return null;
 }
+
+export async function requestFCMToken(): Promise<string | null> {
+  if (typeof window === "undefined" || !("Notification" in window)) {
+    console.warn("Notifications not supported in this environment");
+    return null;
+  }
+
+  try {
+    const permission = await Notification.requestPermission();
+    if (permission !== "granted") {
+      console.log("Notification permission not granted:", permission);
+      return null;
+    }
+
+    if (!messaging) return null;
+
+    const registration = await registerServiceWorker();
+
+    const token = await getToken(messaging, {
+      serviceWorkerRegistration: registration || undefined,
+      vapidKey: import.meta.env.VITE_VAPID_KEY || undefined,
+    });
+
+    return token || null;
+  } catch (error) {
+    console.error("FCM Token error:", error);
+    return null;
+  }
+}
+
+export function listenToForegroundMessages(
+  callback: (payload: { title?: string; body?: string; url?: string; data?: Record<string, unknown> }) => void
+) {
+  if (!messaging) return () => {};
+
+  return onMessage(messaging, (payload) => {
+    console.log("Foreground FCM message received:", payload);
+    const title = payload.notification?.title || (payload.data?.title as string) || "إشعار جديد";
+    const body = payload.notification?.body || (payload.data?.body as string) || "";
+    const url = (payload.data?.url as string) || payload.notification?.icon || "/notifications";
+    
+    callback({
+      title,
+      body,
+      url,
+      data: payload.data,
+    });
+  });
+}
+

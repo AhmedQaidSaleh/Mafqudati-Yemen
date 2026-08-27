@@ -1,8 +1,11 @@
 import { Link, useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
-import { Menu, X, LogIn, Plus, Bell, MessageCircle, User, LogOut, FileText, Bookmark } from "lucide-react";
-import logo from "@/assets/logo.svg";
+import { Menu, X, LogIn, Plus, Bell, MessageCircle, User, LogOut, FileText, Bookmark, Sun, Moon, ShieldCheck } from "lucide-react";
+import logo from "@/assets/logo.png";
 import { useAuth } from "@/lib/auth";
+import { useTheme } from "@/lib/theme";
+import { useQuery } from "@tanstack/react-query";
+import { api } from "@/client/api/client";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -28,7 +31,21 @@ export function SiteHeader() {
   const [open, setOpen] = useState(false);
   const [reportOpen, setReportOpen] = useState(false);
   const { user, signOut } = useAuth();
+  const { theme, toggleTheme } = useTheme();
   const navigate = useNavigate();
+
+  const { data: unreadData } = useQuery({
+    queryKey: ["unread-notifications-count", user?.id],
+    queryFn: async () => {
+      if (!user) return { unreadCount: 0 };
+      const res = await api.get<{ unreadCount: number }>("/notifications/unread-count");
+      return res.data;
+    },
+    enabled: !!user,
+    refetchInterval: 30000,
+  });
+
+  const unreadCount = unreadData?.unreadCount || 0;
 
   const doSignOut = async () => {
     await signOut();
@@ -64,14 +81,34 @@ export function SiteHeader() {
         </nav>
 
         <div className="flex items-center gap-2">
+          {/* Dark / Light Mode Toggle Button */}
+          <button
+            type="button"
+            onClick={toggleTheme}
+            className="inline-flex size-10 items-center justify-center rounded-xl border border-border bg-card text-foreground hover:bg-secondary transition-colors"
+            aria-label={theme === "dark" ? "تفعيل الوضع الفاتح" : "تفعيل الوضع الليلي"}
+            title={theme === "dark" ? "تفعيل الوضع الفاتح" : "تفعيل الوضع الليلي"}
+          >
+            {theme === "dark" ? (
+              <Sun className="size-4 text-amber-400 animate-in spin-in-180 duration-300" />
+            ) : (
+              <Moon className="size-4 text-muted-foreground" />
+            )}
+          </button>
+
           {user ? (
             <>
               <Link
                 to="/notifications"
-                className="hidden sm:inline-flex items-center justify-center rounded-lg p-2 hover:bg-secondary min-h-11 min-w-11"
+                className="relative hidden sm:inline-flex items-center justify-center rounded-lg p-2 hover:bg-secondary min-h-11 min-w-11"
                 aria-label="الإشعارات"
               >
                 <Bell className="size-5 text-primary" />
+                {unreadCount > 0 && (
+                  <span className="absolute top-1.5 start-1.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-destructive px-1 text-[10px] font-black text-destructive-foreground shadow-sm animate-pulse">
+                    {unreadCount > 99 ? "+99" : unreadCount}
+                  </span>
+                )}
               </Link>
 
               <Link
@@ -100,6 +137,15 @@ export function SiteHeader() {
                       <User className="size-4 ms-2" /> الملف الشخصي
                     </Link>
                   </DropdownMenuItem>
+                  {(user.email?.toLowerCase() === "qayda079@gmail.com" ||
+                    user.email?.toLowerCase() === "admin@mafqudati.ye" ||
+                    user.email?.toLowerCase().startsWith("admin@")) && (
+                    <DropdownMenuItem asChild>
+                      <Link to="/admin" className="flex-row-reverse w-full text-primary font-bold bg-primary/10">
+                        <ShieldCheck className="size-4 ms-2 text-primary" /> لوحة الإدارة والأمان
+                      </Link>
+                    </DropdownMenuItem>
+                  )}
                   <DropdownMenuItem asChild>
                     <Link
                       to="/profile"
@@ -182,6 +228,20 @@ export function SiteHeader() {
               <Plus className="size-4" />
               أضف بلاغ
             </button>
+            <button
+              type="button"
+              onClick={() => {
+                toggleTheme();
+              }}
+              className="flex items-center justify-between rounded-lg px-3 py-2.5 text-sm font-semibold border border-border bg-card hover:bg-secondary transition-colors mt-2"
+            >
+              <span className="flex items-center gap-2">
+                {theme === "dark" ? <Sun className="size-4 text-amber-400" /> : <Moon className="size-4" />}
+                <span>{theme === "dark" ? "الوضع الفاتح" : "الوضع الليلي"}</span>
+              </span>
+              <span className="text-xs text-muted-foreground">{theme === "dark" ? "داكن" : "فاتح"}</span>
+            </button>
+
             {user ? (
               <>
                 <Link
@@ -194,9 +254,14 @@ export function SiteHeader() {
                 <Link
                   to="/notifications"
                   onClick={() => setOpen(false)}
-                  className="rounded-lg px-3 py-2.5 text-sm font-semibold"
+                  className="flex items-center justify-between rounded-lg px-3 py-2.5 text-sm font-semibold"
                 >
-                  الإشعارات
+                  <span>الإشعارات</span>
+                  {unreadCount > 0 && (
+                    <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-destructive px-1.5 text-xs font-bold text-destructive-foreground">
+                      {unreadCount}
+                    </span>
+                  )}
                 </Link>
                 <Link
                   to="/profile"
@@ -205,6 +270,18 @@ export function SiteHeader() {
                 >
                   الملف الشخصي
                 </Link>
+                {(user.email?.toLowerCase() === "qayda079@gmail.com" ||
+                  user.email?.toLowerCase() === "admin@mafqudati.ye" ||
+                  user.email?.toLowerCase().startsWith("admin@")) && (
+                  <Link
+                    to="/admin"
+                    onClick={() => setOpen(false)}
+                    className="flex items-center gap-2 rounded-lg px-3 py-2.5 text-sm font-bold text-primary bg-primary/10 border border-primary/20"
+                  >
+                    <ShieldCheck className="size-4" />
+                    <span>لوحة الإدارة والأمان</span>
+                  </Link>
+                )}
                 <button
                   onClick={() => {
                     setOpen(false);

@@ -2,8 +2,7 @@ import { useState, useEffect, useMemo, useCallback } from "react";
 import {
   APIProvider,
   Map,
-  AdvancedMarker,
-  Pin,
+  Marker,
   InfoWindow,
   useMap,
   useMapsLibrary,
@@ -43,8 +42,7 @@ export function isGoogleMapsKeyValid(key?: string | null): boolean {
 }
 
 // Get key with fallbacks
-export const GOOGLE_MAPS_KEY = (
-  (typeof process !== "undefined" && process.env?.GOOGLE_MAPS_PLATFORM_KEY) ||
+export const GOOGLE_MAPS_KEY = (process.env.GOOGLE_MAPS_PLATFORM_KEY ||
   (import.meta as unknown as { env?: Record<string, string> }).env?.VITE_GOOGLE_MAPS_PLATFORM_KEY ||
   (globalThis as unknown as { GOOGLE_MAPS_PLATFORM_KEY?: string }).GOOGLE_MAPS_PLATFORM_KEY ||
   ""
@@ -364,7 +362,6 @@ export function GoogleMapView({ reports, categories, governorates }: GoogleMapVi
             zoom={zoom}
             onCenterChanged={(ev) => setCenter(ev.detail.center)}
             onZoomChanged={(ev) => setZoom(ev.detail.zoom)}
-            mapId="DEMO_MAP_ID"
             internalUsageAttributionIds={["gmp_mcp_codeassist_v1_aistudio"]}
             style={{ width: "100%", height: "100%" }}
             gestureHandling="greedy"
@@ -385,19 +382,13 @@ export function GoogleMapView({ reports, categories, governorates }: GoogleMapVi
               const isLost = report.type === "lost";
 
               return (
-                <AdvancedMarker
+                <Marker
                   key={report.id}
                   position={coords}
                   title={report.title}
                   onClick={() => setSelectedReport(report)}
-                >
-                  <Pin
-                    background={isLost ? "#E11D48" : "#059669"}
-                    borderColor={isLost ? "#9F1239" : "#065F46"}
-                    glyphColor="#FFFFFF"
-                    scale={selectedReport?.id === report.id ? 1.25 : 1}
-                  />
-                </AdvancedMarker>
+                  icon={isLost ? "http://maps.google.com/mapfiles/ms/icons/red-dot.png" : "http://maps.google.com/mapfiles/ms/icons/green-dot.png"}
+                />
               );
             })}
 

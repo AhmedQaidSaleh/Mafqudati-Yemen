@@ -14,7 +14,7 @@ import { setGmailAccessToken } from "@/lib/gmail";
 import { GoogleAuthProvider } from "firebase/auth";
 import { api } from "@/client/api/client";
 import { signInSchema, signUpSchema } from "@/lib/schemas";
-import logo from "@/assets/logo.svg";
+import logo from "@/assets/logo.png";
 import { Eye, EyeOff, Loader2, AlertCircle, Copy, Check } from "lucide-react";
 import { z } from "zod";
 

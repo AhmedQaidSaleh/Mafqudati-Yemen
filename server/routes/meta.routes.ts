@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { db } from "../db";
-import { governorates, districts, categories } from "../db/schema";
-import { eq } from "drizzle-orm";
+import { governorates, districts, categories, users, reports } from "../db/schema";
+import { eq, sql } from "drizzle-orm";
 import { YEMEN_GOVERNORATES, YEMEN_DISTRICTS, DEFAULT_CATEGORIES } from "../data/yemen-geo";
 
 const router = Router();
@@ -121,7 +121,19 @@ router.get("/categories", async (_req, res) => {
   try {
     if (db) {
       await ensureYemenGeoSeeded();
-      const data = await db.select().from(categories).orderBy(categories.id);
+      const data = await db.select({
+        id: categories.id,
+        slug: categories.slug,
+        name_ar: categories.name_ar,
+        name_en: categories.name_en,
+        icon: categories.icon,
+        report_count: sql<number>`cast(count(${reports.id}) as integer)`,
+      })
+      .from(categories)
+      .leftJoin(reports, eq(categories.id, reports.category_id))
+      .groupBy(categories.id)
+      .orderBy(categories.id);
+      
       if (data && data.length > 0) {
         return res.json(data);
       }
@@ -130,6 +142,40 @@ router.get("/categories", async (_req, res) => {
   } catch (error) {
     console.error("Fetch categories error:", error);
     res.json(DEFAULT_CATEGORIES);
+  }
+});
+
+router.get("/stats", async (_req, res) => {
+  try {
+    if (!db) throw new Error("DB not available");
+
+    const usersCountResult = await db.select({ count: sql<number>`cast(count(${users.id}) as integer)` }).from(users);
+    const usersCount = usersCountResult[0]?.count || 0;
+
+    const lostCountResult = await db.select({ count: sql<number>`cast(count(${reports.id}) as integer)` }).from(reports).where(eq(reports.type, 'lost'));
+    const lostCount = lostCountResult[0]?.count || 0;
+
+    const foundCountResult = await db.select({ count: sql<number>`cast(count(${reports.id}) as integer)` }).from(reports).where(eq(reports.type, 'found'));
+    const foundCount = foundCountResult[0]?.count || 0;
+
+    const resolvedCountResult = await db.select({ count: sql<number>`cast(count(${reports.id}) as integer)` }).from(reports).where(eq(reports.status, 'resolved'));
+    const resolvedCount = resolvedCountResult[0]?.count || 0;
+
+    res.json({
+      users: usersCount,
+      lost: lostCount,
+      found: foundCount,
+      resolved: resolvedCount,
+    });
+  } catch (error) {
+    console.error("Fetch stats error:", error);
+    // Fallback static
+    res.json({
+      users: 0,
+      lost: 0,
+      found: 0,
+      resolved: 0,
+    });
   }
 });
 

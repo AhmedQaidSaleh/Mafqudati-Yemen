@@ -61,18 +61,36 @@ export async function fetchApi<T>(endpoint: string, options: RequestInit = {}): 
   }
 
   const baseUrl = typeof window !== "undefined" ? "" : "http://localhost:3000";
-  const response = await fetch(`${baseUrl}${API_BASE_URL}${endpoint}`, {
-    ...options,
-    headers,
-  });
+  let response: Response;
+  try {
+    response = await fetch(`${baseUrl}${API_BASE_URL}${endpoint}`, {
+      ...options,
+      headers,
+    });
+  } catch (networkErr) {
+    const errorMsg =
+      networkErr instanceof Error && networkErr.name === "AbortError"
+        ? "تم إلغاء الطلب"
+        : "تعذر الاتصال بالخادم. يرجى التحقق من اتصال الإنترنت والمحاولة مرة أخرى.";
+    throw new ApiError(0, errorMsg);
+  }
 
   if (!response.ok) {
-    let message = "API request failed";
+    let message = "فشل في تنفيذ الطلب من الخادم";
     try {
-      const errorData = (await response.json()) as { error?: string };
-      message = errorData.error || message;
+      const errorData = (await response.json()) as { error?: string; message?: string };
+      message = errorData.error || errorData.message || message;
     } catch {
-      // Not JSON
+      // Fallback based on HTTP status
+      if (response.status === 401) {
+        message = "انتهت صلاحية الجلسة، يرجى تسجيل الدخول مجدداً";
+      } else if (response.status === 403) {
+        message = "ليس لديك الصلاحية للقيام بهذا الإجراء";
+      } else if (response.status === 404) {
+        message = "العنصر المطلوب غير موجود على الخادم";
+      } else if (response.status >= 500) {
+        message = "حدث خطأ غير متوقع في الخادم، يرجى المحاولة لاحقاً";
+      }
     }
     throw new ApiError(response.status, message);
   }

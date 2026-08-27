@@ -11,9 +11,10 @@ import { uploadImage, validateImage } from "@/lib/upload";
 import { profileSchema } from "@/lib/schemas";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { Loader2, Upload, Mail } from "lucide-react";
+import { Loader2, Upload, Mail, ShieldCheck, Bell } from "lucide-react";
 import { initialOf } from "@/lib/format";
 import { GmailInboxHub } from "@/components/gmail/GmailInboxHub";
+import { NotificationPreferencesTab } from "@/components/profile/NotificationPreferencesTab";
 
 export const Route = createFileRoute("/_authenticated/profile")({
   head: () => ({ meta: [{ title: "الملف الشخصي | مفقوداتي" }] }),
@@ -23,7 +24,7 @@ export const Route = createFileRoute("/_authenticated/profile")({
 function ProfilePage() {
   const { user } = useAuth();
   const qc = useQueryClient();
-  const [tab, setTab] = useState<"info" | "reports" | "saved" | "gmail">("info");
+  const [tab, setTab] = useState<"info" | "reports" | "saved" | "notifications" | "gmail">("info");
   const { data: profile } = useQuery(profileQuery(user?.id));
   const { data: myReports = [] } = useQuery(myReportsQuery(user?.id));
   const { data: saved = [] } = useQuery(savedReportsQuery(user?.id));
@@ -87,6 +88,7 @@ function ProfilePage() {
               { id: "info", t: "البيانات الشخصية", icon: null },
               { id: "reports", t: `بلاغاتي (${myReports.length})`, icon: null },
               { id: "saved", t: `المحفوظة (${saved.length})`, icon: null },
+              { id: "notifications", t: "إعدادات وتفضيلات الإشعارات", icon: Bell },
               { id: "gmail", t: "بريد Gmail", icon: Mail },
             ].map((x) => (
               <button
@@ -96,9 +98,24 @@ function ProfilePage() {
                 className={`w-full flex items-center justify-between rounded-xl px-4 py-3 text-right ${tab === x.id ? "bg-secondary text-primary font-extrabold" : "hover:bg-secondary text-foreground"}`}
               >
                 <span>{x.t}</span>
-                {x.icon && <x.icon className="size-4 text-rose-500" />}
+                {x.icon && <x.icon className={`size-4 ${x.id === "notifications" ? "text-primary" : "text-rose-500"}`} />}
               </button>
             ))}
+
+            {(profile?.role === "ADMIN" ||
+              user?.email?.toLowerCase() === "qayda079@gmail.com" ||
+              user?.email?.toLowerCase() === "admin@mafqudati.ye" ||
+              user?.email?.toLowerCase().startsWith("admin@")) && (
+              <div className="pt-3 border-t border-border mt-3">
+                <Link
+                  to="/admin"
+                  className="w-full flex items-center justify-between rounded-xl bg-primary/10 border border-primary/20 px-4 py-3 text-right font-black text-primary hover:bg-primary/20 transition-colors"
+                >
+                  <span>لوحة الإدارة والأمان</span>
+                  <ShieldCheck className="size-4 text-primary" />
+                </Link>
+              </div>
+            )}
           </nav>
         </aside>
         <div className="card-soft rounded-3xl p-6 sm:p-10">
@@ -118,6 +135,7 @@ function ProfilePage() {
                 subtitle="احفظ البلاغات التي تهمك للرجوع إليها لاحقاً"
               />
             ))}
+          {tab === "notifications" && <NotificationPreferencesTab />}
           {tab === "gmail" && <GmailInboxHub />}
           {tab === "info" && (
             <div className="mt-6">

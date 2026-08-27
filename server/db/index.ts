@@ -1,5 +1,5 @@
-import { drizzle as drizzlePglite } from "drizzle-orm/pglite";
 import { drizzle as drizzlePg } from "drizzle-orm/node-postgres";
+import { drizzle as drizzlePglite } from "drizzle-orm/pglite";
 import { PGlite } from "@electric-sql/pglite";
 import pg from "pg";
 import * as schema from "./schema";
@@ -17,14 +17,36 @@ declare global {
 
 export function getDatabase(): AppDatabase {
   if (!global._dbInstance) {
-    if (env.DATABASE_URL || (env.SQL_HOST && env.SQL_DB_NAME)) {
-      // Use Cloud SQL (PostgreSQL)
+    const isProd = process.env.NODE_ENV === "production";
+    
+    // Check if Cloud SQL Unix socket path exists
+    const cloudSqlDir = "/app/cloudsql/mafqudati-d3b18:europe-west3:ai-studio-57f3ad0a";
+    const hasCloudSqlSocket = fsSync.existsSync(cloudSqlDir);
+
+    const host = env.SQL_HOST || process.env.PGHOST || (hasCloudSqlSocket ? cloudSqlDir : undefined);
+    const user = env.SQL_USER || process.env.PGUSER;
+    const password = env.SQL_PASSWORD || process.env.PGPASSWORD;
+    const database = env.SQL_DB_NAME || process.env.PGDATABASE;
+
+    if (isProd && !env.DATABASE_URL && !host && !user) {
+      console.error("CRITICAL ERROR: Production DATABASE_URL is required.");
+      process.exit(1);
+    }
+
+    if (env.DATABASE_URL || host || user || database) {
+      // Use PostgreSQL / Neon / Cloud SQL
       const pool = new pg.Pool({
-        host: env.SQL_HOST,
-        user: env.SQL_USER,
-        password: env.SQL_PASSWORD,
-        database: env.SQL_DB_NAME,
+        host,
+        user,
+        password,
+        database,
         connectionString: env.DATABASE_URL,
+        max: 3,
+        idleTimeoutMillis: 30000,
+        connectionTimeoutMillis: 10000,
+        ssl: env.DATABASE_URL && (env.DATABASE_URL.includes("sslmode=require") || env.DATABASE_URL.includes("neon.tech") || env.DATABASE_URL.includes("render.com"))
+          ? { rejectUnauthorized: false }
+          : undefined,
       });
 
       // Simple mock for init function that expects query method
@@ -33,23 +55,23 @@ export function getDatabase(): AppDatabase {
       };
 
       global._dbInitPromise = initializeDatabaseSchema(clientMock as any).catch((err) => {
-        console.error("Failed to initialize Cloud SQL database:", err);
+        console.warn("Database initialization notice (PostgreSQL):", err.message || err);
       });
 
       global._dbInstance = drizzlePg(pool, { schema });
     } else {
-      // Use Local PGlite
+      // Use Local PGlite (Development only)
       const dataDir = path.join(process.cwd(), ".data", "pglite");
       try {
         if (!fsSync.existsSync(dataDir)) {
           fsSync.mkdirSync(dataDir, { recursive: true });
         }
-      } catch {}
+      } catch (e) { /* ignore */ }
 
       const client = new PGlite(dataDir);
       
       global._dbInitPromise = client.waitReady.then(() => initializeDatabaseSchema(client)).catch((err) => {
-        console.error("Failed to initialize PGlite database:", err);
+        console.warn("Database initialization notice (PGlite):", err.message || err);
       });
       
       global._dbInstance = drizzlePglite(client, { schema });

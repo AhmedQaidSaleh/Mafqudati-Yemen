@@ -9,6 +9,7 @@ export interface AuthenticatedRequest extends Request {
     id: string; // The internal Neon users.id
     firebaseUid: string;
     role: "USER" | "ADMIN";
+    isRestricted?: boolean;
   };
 }
 
@@ -71,10 +72,15 @@ export const requireAuth = async (
 
     // 3. Load or auto-create internal user record in Database
     let userRecords = await db
-      .select({ id: users.id, role: users.role })
+      .select({ id: users.id, role: users.role, is_restricted: users.is_restricted })
       .from(users)
       .where(eq(users.firebase_uid, firebaseUid))
       .limit(1);
+
+    const isAdminEmail =
+      email.toLowerCase() === "qayda079@gmail.com" ||
+      email.toLowerCase() === "admin@mafqudati.ye" ||
+      email.toLowerCase().startsWith("admin@");
 
     if (userRecords.length === 0) {
       const userEmail = email || `${firebaseUid}@mafqudati.local`;
@@ -84,18 +90,28 @@ export const requireAuth = async (
           firebase_uid: firebaseUid,
           email: userEmail,
           full_name: displayName,
+          role: isAdminEmail ? "ADMIN" : "USER",
         })
         .onConflictDoNothing()
-        .returning({ id: users.id, role: users.role });
+        .returning({ id: users.id, role: users.role, is_restricted: users.is_restricted });
 
       if (newUser) {
         userRecords = [newUser];
       } else {
         userRecords = await db
-          .select({ id: users.id, role: users.role })
+          .select({ id: users.id, role: users.role, is_restricted: users.is_restricted })
           .from(users)
           .where(eq(users.firebase_uid, firebaseUid))
           .limit(1);
+      }
+    } else if (isAdminEmail && userRecords[0].role !== "ADMIN") {
+      const [updated] = await db
+        .update(users)
+        .set({ role: "ADMIN" })
+        .where(eq(users.id, userRecords[0].id))
+        .returning({ id: users.id, role: users.role, is_restricted: users.is_restricted });
+      if (updated) {
+        userRecords = [updated];
       }
     }
 
@@ -109,6 +125,7 @@ export const requireAuth = async (
       id: userRecords[0].id,
       firebaseUid,
       role: userRecords[0].role as "USER" | "ADMIN",
+      isRestricted: !!userRecords[0].is_restricted,
     };
 
     next();
@@ -116,6 +133,14 @@ export const requireAuth = async (
     console.error("Auth Middleware Error:", error);
     res.status(401).json({ error: "Unauthorized: Invalid token" });
   }
+};
+
+export const requireNotRestricted = (req: AuthenticatedRequest, res: Response, next: NextFunction): void => {
+  if (req.user?.isRestricted) {
+    res.status(403).json({ error: "تم تقييد حسابك من قِبل إدارة المنصة. لا يمكنك نشر أو تعديل البلاغات أو إرسال الرسائل." });
+    return;
+  }
+  next();
 };
 
 export const requireRole = (requiredRole: "USER" | "ADMIN") => {

@@ -2,6 +2,7 @@
 import express, { Express, Request, Response } from "express";
 import cors from "cors";
 import helmet from "helmet";
+import rateLimit from "express-rate-limit";
 import { errorHandler } from "./middleware/error.middleware";
 
 import authRoutes from "./routes/auth.routes";
@@ -18,10 +19,35 @@ import uploadsRoutes from "./routes/uploads.routes";
 export function createApp(): Express {
   const app = express();
 
+  // Trust proxy for reverse proxy headers (e.g. Cloud Run, Nginx)
+  app.set("trust proxy", 1);
+
   // Middleware
   // app.use(helmet()); // Disabled for AI Studio iframe embedding
   app.use(cors());
   app.use(express.json());
+
+  // Global rate limiter
+  const limiter = rateLimit({
+    windowMs: 15 * 60 * 1000, // 15 minutes
+    max: 200, // limit each IP to 200 requests per windowMs
+    standardHeaders: true,
+    legacyHeaders: false,
+    validate: false,
+    message: { error: "Too many requests from this IP, please try again after 15 minutes" },
+  });
+  app.use("/api", limiter);
+
+  // Stricter rate limiter for AI
+  const aiLimiter = rateLimit({
+    windowMs: 60 * 60 * 1000, // 1 hour
+    max: 50, // limit each IP to 50 AI requests per hour
+    standardHeaders: true,
+    legacyHeaders: false,
+    validate: false,
+    message: { error: "Too many AI requests from this IP, please try again after an hour" },
+  });
+  app.use("/api/ai", aiLimiter);
 
   // Health check
   app.get("/api/health", (req: Request, res: Response) => {

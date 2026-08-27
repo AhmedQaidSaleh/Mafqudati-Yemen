@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
-import { APIProvider, Map, AdvancedMarker, Pin, InfoWindow } from "@vis.gl/react-google-maps";
+import { APIProvider, Map, Marker, InfoWindow } from "@vis.gl/react-google-maps";
 import { Link } from "@tanstack/react-router";
 import { MapPin, Eye, RotateCcw, Navigation, Loader2, AlertCircle, Tag } from "lucide-react";
 import { api } from "@/client/api/client";
@@ -191,7 +191,6 @@ export function ReportsMap({
           zoom={zoom}
           onCenterChanged={(ev) => setCenter(ev.detail.center)}
           onZoomChanged={(ev) => setZoom(ev.detail.zoom)}
-          mapId="REPORTS_MAP_ID"
           internalUsageAttributionIds={["gmp_mcp_codeassist_v1_aistudio"]}
           style={{ width: "100%", height: "100%" }}
           gestureHandling="greedy"
@@ -204,24 +203,13 @@ export function ReportsMap({
             const isSelected = selectedReport?.id === report.id;
 
             return (
-              <AdvancedMarker
-                key={report.id}
-                position={coords}
-                title={report.title}
-                onClick={() => {
-                  setSelectedReport(report);
-                  if (onMarkerClick) {
-                    onMarkerClick(report);
-                  }
-                }}
-              >
-                <Pin
-                  background={isLost ? "#E11D48" : "#059669"}
-                  borderColor={isLost ? "#9F1239" : "#065F46"}
-                  glyphColor="#FFFFFF"
-                  scale={isSelected ? 1.25 : 1}
-                />
-              </AdvancedMarker>
+              <Marker
+              key={report.id}
+              position={coords}
+              title={report.title}
+              onClick={() => setSelectedReport(report)}
+              icon={isSelected ? "http://maps.google.com/mapfiles/ms/icons/blue-dot.png" : isLost ? "http://maps.google.com/mapfiles/ms/icons/red-dot.png" : "http://maps.google.com/mapfiles/ms/icons/green-dot.png"}
+            />
             );
           })}
 

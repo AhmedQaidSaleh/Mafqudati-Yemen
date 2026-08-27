@@ -138,7 +138,7 @@ export function SmartAiSearch() {
   }
 
   return (
-    <section className="mx-auto mt-16 max-w-7xl px-4 sm:px-6 lg:px-8">
+    <section className="relative z-10 mx-auto -mt-6 sm:-mt-10 lg:-mt-14 max-w-7xl px-4 sm:px-6 lg:px-8">
       <div
         className="relative overflow-hidden rounded-3xl border border-border bg-white/70 p-6 shadow-elevated backdrop-blur-xl sm:p-10"
         style={{ boxShadow: "var(--shadow-elevated)" }}
