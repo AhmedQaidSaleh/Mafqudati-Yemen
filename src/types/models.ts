@@ -60,11 +60,19 @@ export interface Report {
   brand?: string | null;
   keywords?: string[] | null;
   notes?: string | null;
+  secret_verification_mark?: string | null;
   incident_date?: string | null;
   contact_preference?: "phone" | "messages" | "both";
   status: "active" | "resolved" | "closed" | "new";
   view_count?: number;
   reward_amount?: number | string | null;
+  age?: string | null;
+  gender?: string | null;
+  clothes_description?: string | null;
+  health_condition?: string | null;
+  emergency_phone?: string | null;
+  is_humanitarian?: boolean;
+  sightings?: ReportSighting[];
   created_at: string;
   updated_at?: string;
   report_images?: ReportImage[];
@@ -72,6 +80,20 @@ export interface Report {
   governorates?: { name_ar: string } | null;
   districts?: { name_ar: string } | null;
   profile?: Profile | null;
+}
+
+export interface ReportSighting {
+  id: string;
+  report_id: string;
+  user_id?: string | null;
+  reporter_name?: string | null;
+  reporter_phone?: string | null;
+  sighting_time?: string | null;
+  location_text: string;
+  latitude?: string | null;
+  longitude?: string | null;
+  notes: string;
+  created_at: string;
 }
 
 export interface NotificationItem {
@@ -92,7 +114,18 @@ export interface MessageItem {
   sender_id: string;
   receiver_id: string;
   body: string;
+  read_at?: string | null;
   created_at: string;
+  sender?: {
+    id: string;
+    full_name: string;
+    avatar_url?: string | null;
+  };
+  receiver?: {
+    id: string;
+    full_name: string;
+    avatar_url?: string | null;
+  };
 }
 
 export interface AiMatch {

@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
-import { APIProvider, Map, Marker, InfoWindow } from "@vis.gl/react-google-maps";
+import { APIProvider, Map, InfoWindow } from "@vis.gl/react-google-maps";
 import { Link } from "@tanstack/react-router";
 import { MapPin, Eye, RotateCcw, Navigation, Loader2, AlertCircle, Tag } from "lucide-react";
 import { api } from "@/client/api/client";
@@ -7,6 +7,7 @@ import type { Report } from "@/types/models";
 import { YEMEN_CENTER, getReportCoordinates } from "@/lib/yemen-geo";
 import { GOOGLE_MAPS_KEY, hasValidMapsKey } from "./GoogleMapView";
 import { ApiKeyPrompt } from "./ApiKeyPrompt";
+import { ClusteredReportMarkers } from "./ClusteredReportMarkers";
 
 export interface ReportsMapProps {
   className?: string;
@@ -187,6 +188,7 @@ export function ReportsMap({
       {/* Google Map Instance */}
       <APIProvider apiKey={GOOGLE_MAPS_KEY} version="weekly">
         <Map
+          mapId="DEMO_MAP_ID"
           center={center}
           zoom={zoom}
           onCenterChanged={(ev) => setCenter(ev.detail.center)}
@@ -196,22 +198,16 @@ export function ReportsMap({
           gestureHandling="greedy"
           disableDefaultUI={false}
         >
-          {/* Render markers for each report fetched from /api/reports */}
-          {reports.map((report) => {
-            const coords = getReportCoordinates(report);
-            const isLost = report.type === "lost";
-            const isSelected = selectedReport?.id === report.id;
-
-            return (
-              <Marker
-              key={report.id}
-              position={coords}
-              title={report.title}
-              onClick={() => setSelectedReport(report)}
-              icon={isSelected ? "http://maps.google.com/mapfiles/ms/icons/blue-dot.png" : isLost ? "http://maps.google.com/mapfiles/ms/icons/red-dot.png" : "http://maps.google.com/mapfiles/ms/icons/green-dot.png"}
-            />
-            );
-          })}
+          {/* Clustered markers for reports fetched from /api/reports */}
+          <ClusteredReportMarkers
+            reports={reports}
+            selectedReportId={selectedReport?.id}
+            onSelectReport={(report) => {
+              setSelectedReport(report as Report);
+              if (onMarkerClick) onMarkerClick(report as Report);
+            }}
+            enableClustering={true}
+          />
 
           {/* InfoWindow for selected report */}
           {selectedReport && (

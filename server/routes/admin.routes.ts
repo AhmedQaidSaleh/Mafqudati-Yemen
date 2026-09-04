@@ -31,15 +31,17 @@ router.get("/dashboard-summary", async (req: AuthenticatedRequest, res) => {
     const personsCategory = await db
       .select()
       .from(categories)
-      .where(eq(categories.slug, "persons"))
+      .where(or(eq(categories.slug, "missing-persons"), eq(categories.slug, "persons")))
       .limit(1);
 
-    const personCategoryId = personsCategory[0]?.id;
+    const personCategoryId = personsCategory[0]?.id ?? 9;
 
     // Filter missing persons reports
     const missingPersonsReports = reportList.filter(
       (r) =>
-        (personCategoryId && r.category_id === personCategoryId) ||
+        r.category_id === personCategoryId ||
+        r.category_id === 9 ||
+        r.is_humanitarian === true ||
         r.title.includes("مفقود") ||
         r.title.includes("طفل") ||
         r.title.includes("شخص") ||

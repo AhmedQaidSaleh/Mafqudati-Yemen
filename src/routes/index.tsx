@@ -35,6 +35,7 @@ import { useQuery } from "@tanstack/react-query";
 import { api } from "@/client/api/client";
 import heroImg from "@/assets/hero.png";
 import { SmartAiSearch } from "@/components/home/SmartAiSearch";
+import { EmergencyBanner } from "@/components/home/EmergencyBanner";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -159,6 +160,7 @@ const faqs = [
 function HomePage() {
   return (
     <>
+      <EmergencyBanner />
       <Hero />
       <Suspense
         fallback={

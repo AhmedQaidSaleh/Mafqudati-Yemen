@@ -278,4 +278,11 @@ export const DEFAULT_CATEGORIES: CategoryData[] = [
     name_en: "Other Personal Items",
     icon: "Package",
   },
+  {
+    id: 9,
+    slug: "missing-persons",
+    name_ar: "أشخاص وأطفال مفقودون",
+    name_en: "Missing Persons & Children",
+    icon: "UserX",
+  },
 ];

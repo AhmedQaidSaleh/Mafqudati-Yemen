@@ -15,6 +15,8 @@ import { Loader2, Upload, Mail, ShieldCheck, Bell } from "lucide-react";
 import { initialOf } from "@/lib/format";
 import { GmailInboxHub } from "@/components/gmail/GmailInboxHub";
 import { NotificationPreferencesTab } from "@/components/profile/NotificationPreferencesTab";
+import { EditReportModal } from "@/components/reports/EditReportModal";
+import type { Report } from "@/types/models";
 
 export const Route = createFileRoute("/_authenticated/profile")({
   head: () => ({ meta: [{ title: "الملف الشخصي | مفقوداتي" }] }),
@@ -29,6 +31,7 @@ function ProfilePage() {
   const { data: myReports = [] } = useQuery(myReportsQuery(user?.id));
   const { data: saved = [] } = useQuery(savedReportsQuery(user?.id));
   const [uploading, setUploading] = useState(false);
+  const [editingReport, setEditingReport] = useState<Report | null>(null);
 
   const uploadAvatar = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const f = e.target.files?.[0];
@@ -122,7 +125,7 @@ function ProfilePage() {
           {tab === "info" && <InfoTab profile={profile} />}
           {tab === "reports" &&
             (myReports.length ? (
-              <ReportGrid reports={myReports as never} />
+              <ReportGrid reports={myReports as never} onEdit={(r) => setEditingReport(r as Report)} />
             ) : (
               <EmptyState title="لا توجد بلاغات" subtitle="أنشئ بلاغك الأول من زر أضف بلاغ" />
             ))}
@@ -146,6 +149,14 @@ function ProfilePage() {
           )}
         </div>
       </div>
+
+      {editingReport && (
+        <EditReportModal
+          report={editingReport}
+          isOpen={Boolean(editingReport)}
+          onClose={() => setEditingReport(null)}
+        />
+      )}
     </PageShell>
   );
 }

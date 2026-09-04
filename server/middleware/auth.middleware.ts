@@ -158,3 +158,63 @@ export const requireRole = (requiredRole: "USER" | "ADMIN") => {
     next();
   };
 };
+
+export const optionalAuth = async (
+  req: AuthenticatedRequest,
+  _res: Response,
+  next: NextFunction,
+): Promise<void> => {
+  try {
+    const authHeader = req.headers.authorization;
+    if (!authHeader?.startsWith("Bearer ")) {
+      return next();
+    }
+
+    const idToken = authHeader.split("Bearer ")[1];
+    if (!idToken) return next();
+
+    let firebaseUid = "";
+    if (firebaseAuth) {
+      try {
+        const decodedToken = await firebaseAuth.verifyIdToken(idToken);
+        firebaseUid = decodedToken.uid;
+      } catch {
+        // continue to fallback
+      }
+    }
+
+    if (!firebaseUid && idToken.includes(".")) {
+      try {
+        const parts = idToken.split(".");
+        if (parts.length === 3) {
+          const payload = JSON.parse(Buffer.from(parts[1], "base64").toString("utf8"));
+          firebaseUid = payload.user_id || payload.sub || payload.uid || "";
+        }
+      } catch {
+        // ignore
+      }
+    }
+
+    if (!firebaseUid || !db) {
+      return next();
+    }
+
+    const userRecords = await db
+      .select({ id: users.id, role: users.role, is_restricted: users.is_restricted })
+      .from(users)
+      .where(eq(users.firebase_uid, firebaseUid))
+      .limit(1);
+
+    if (userRecords.length > 0) {
+      req.user = {
+        id: userRecords[0].id,
+        firebaseUid,
+        role: userRecords[0].role as "USER" | "ADMIN",
+        isRestricted: !!userRecords[0].is_restricted,
+      };
+    }
+  } catch (err) {
+    console.debug("optionalAuth non-blocking error:", err);
+  }
+  next();
+};

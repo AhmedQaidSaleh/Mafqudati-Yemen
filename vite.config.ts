@@ -7,8 +7,15 @@ import path from "path";
 export default defineConfig({
   resolve: {
     alias: {
-      "@": path.resolve(__dirname, "./src"),
+      "@": path.resolve(import.meta.dirname, "./src"),
+      "@googlemaps/markerclusterer": path.resolve(
+        import.meta.dirname,
+        "./node_modules/@googlemaps/markerclusterer/dist/index.esm.mjs",
+      ),
     },
+  },
+  ssr: {
+    noExternal: ["@googlemaps/markerclusterer"],
   },
   define: {
     "process.env.GOOGLE_MAPS_PLATFORM_KEY": JSON.stringify(

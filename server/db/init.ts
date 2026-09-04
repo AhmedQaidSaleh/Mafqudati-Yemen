@@ -28,7 +28,15 @@ export async function initializeDatabaseSchema(client: DatabaseQueryable) {
       ALTER TABLE "users" ADD COLUMN IF NOT EXISTS "fcm_token" text;
       ALTER TABLE "users" ADD COLUMN IF NOT EXISTS "is_restricted" boolean NOT NULL DEFAULT false;
       ALTER TABLE "reports" ADD COLUMN IF NOT EXISTS "notes" text;
+      ALTER TABLE "reports" ADD COLUMN IF NOT EXISTS "secret_verification_mark" text;
+      ALTER TABLE "reports" ADD COLUMN IF NOT EXISTS "reward_amount" integer;
       ALTER TABLE "reports" ADD COLUMN IF NOT EXISTS "contact_preference" varchar(50) DEFAULT 'in_app';
+      ALTER TABLE "reports" ADD COLUMN IF NOT EXISTS "age" varchar(50);
+      ALTER TABLE "reports" ADD COLUMN IF NOT EXISTS "gender" varchar(20);
+      ALTER TABLE "reports" ADD COLUMN IF NOT EXISTS "clothes_description" text;
+      ALTER TABLE "reports" ADD COLUMN IF NOT EXISTS "health_condition" text;
+      ALTER TABLE "reports" ADD COLUMN IF NOT EXISTS "emergency_phone" varchar(50);
+      ALTER TABLE "reports" ADD COLUMN IF NOT EXISTS "is_humanitarian" boolean NOT NULL DEFAULT false;
     `);
 
     await client.query(`
@@ -77,6 +85,8 @@ export async function initializeDatabaseSchema(client: DatabaseQueryable) {
         "color" varchar(100),
         "keywords" text[],
         "notes" text,
+        "secret_verification_mark" text,
+        "reward_amount" integer,
         "contact_preference" varchar(50) DEFAULT 'in_app',
         "created_at" timestamp NOT NULL DEFAULT now(),
         "updated_at" timestamp NOT NULL DEFAULT now()
@@ -128,6 +138,22 @@ export async function initializeDatabaseSchema(client: DatabaseQueryable) {
       );
     `);
 
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS "report_sightings" (
+        "id" uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+        "report_id" uuid NOT NULL REFERENCES "reports"("id") ON DELETE CASCADE,
+        "user_id" uuid REFERENCES "users"("id") ON DELETE SET NULL,
+        "reporter_name" varchar(255),
+        "reporter_phone" varchar(50),
+        "sighting_time" varchar(100),
+        "location_text" text NOT NULL,
+        "latitude" varchar(50),
+        "longitude" varchar(50),
+        "notes" text NOT NULL,
+        "created_at" timestamp NOT NULL DEFAULT now()
+      );
+    `);
+
     // 3. Seed Governorates (Batch check and multi-row insert)
     const govCheck = (await client.query(`SELECT COUNT(*) as count FROM "governorates"`).catch(() => ({ rows: [] }))) as any;
     const govCount = Number(govCheck?.rows?.[0]?.count || 0);
@@ -173,24 +199,20 @@ export async function initializeDatabaseSchema(client: DatabaseQueryable) {
     }
 
     // 5. Seed Categories (Batch check and multi-row insert)
-    const catCheck = (await client.query(`SELECT COUNT(*) as count FROM "categories"`).catch(() => ({ rows: [] }))) as any;
-    const catCount = Number(catCheck?.rows?.[0]?.count || 0);
+    const catValues: any[] = [];
+    const catPlaceholders: string[] = [];
+    DEFAULT_CATEGORIES.forEach((cat, idx) => {
+      const offset = idx * 5;
+      catPlaceholders.push(`($${offset + 1}, $${offset + 2}, $${offset + 3}, $${offset + 4}, $${offset + 5})`);
+      catValues.push(cat.id, cat.slug, cat.name_ar, cat.name_en, cat.icon || "Package");
+    });
 
-    if (catCount === 0) {
-      const catValues: any[] = [];
-      const catPlaceholders: string[] = [];
-      DEFAULT_CATEGORIES.forEach((cat, idx) => {
-        const offset = idx * 5;
-        catPlaceholders.push(`($${offset + 1}, $${offset + 2}, $${offset + 3}, $${offset + 4}, $${offset + 5})`);
-        catValues.push(cat.id, cat.slug, cat.name_ar, cat.name_en, cat.icon || "Package");
-      });
-
-      if (catPlaceholders.length > 0) {
-        await client.query(
-          `INSERT INTO "categories" (id, slug, name_ar, name_en, icon) VALUES ${catPlaceholders.join(", ")} ON CONFLICT (id) DO NOTHING`,
-          catValues
-        );
-      }
+    if (catPlaceholders.length > 0) {
+      await client.query(
+        `INSERT INTO "categories" (id, slug, name_ar, name_en, icon) VALUES ${catPlaceholders.join(", ")} 
+         ON CONFLICT (id) DO UPDATE SET slug = EXCLUDED.slug, name_ar = EXCLUDED.name_ar, name_en = EXCLUDED.name_en, icon = EXCLUDED.icon`,
+        catValues
+      );
     }
 
     console.log("Database schema and Yemen geo seed data initialized successfully.");

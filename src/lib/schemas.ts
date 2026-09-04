@@ -39,6 +39,7 @@ export const reportSchema = z.object({
   lng: z.coerce.number().min(-180).max(180).optional().nullable(),
   incident_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "تاريخ غير صالح"),
   contact_preference: z.enum(["in_app", "phone", "both"]),
+  secret_verification_mark: z.string().trim().max(500).optional().nullable().or(z.literal("")),
   reward_amount: z.coerce.number().nonnegative().max(100000000).optional().nullable(),
 });
 export type ReportInput = z.infer<typeof reportSchema>;

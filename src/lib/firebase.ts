@@ -45,10 +45,14 @@ export const db: Firestore = firebaseAppletConfig.firestoreDatabaseId
   : getFirestore(app);
 export const googleProvider: GoogleAuthProvider = new GoogleAuthProvider();
 googleProvider.setCustomParameters({ prompt: "select_account" });
-googleProvider.addScope("https://www.googleapis.com/auth/gmail.send");
-googleProvider.addScope("https://www.googleapis.com/auth/gmail.readonly");
-googleProvider.addScope("https://www.googleapis.com/auth/gmail.compose");
-googleProvider.addScope("https://www.googleapis.com/auth/gmail.modify");
+
+// Dedicated provider for optional Gmail integration requested only when needed
+export const gmailGoogleProvider: GoogleAuthProvider = new GoogleAuthProvider();
+gmailGoogleProvider.setCustomParameters({ prompt: "select_account" });
+gmailGoogleProvider.addScope("https://www.googleapis.com/auth/gmail.send");
+gmailGoogleProvider.addScope("https://www.googleapis.com/auth/gmail.readonly");
+gmailGoogleProvider.addScope("https://www.googleapis.com/auth/gmail.compose");
+gmailGoogleProvider.addScope("https://www.googleapis.com/auth/gmail.modify");
 
 export async function testFirestoreConnection() {
   try {

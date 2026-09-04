@@ -54,7 +54,7 @@ function NotificationsPage() {
         fcmError?: string;
       }>("/notifications/test-push");
 
-      if (res.data.success) {
+      if (res?.success) {
         playNotificationSound();
         toast.success("تم إرسال الإشعار التجريبي بنجاح!");
         qc.invalidateQueries({ queryKey: ["notifications"] });

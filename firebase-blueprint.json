@@ -37,6 +37,7 @@
         "brand": { "type": "string", "maxLength": 100 },
         "color": { "type": "string", "maxLength": 50 },
         "keywords": { "type": "array" },
+        "secretVerificationMark": { "type": "string", "maxLength": 500 },
         "createdAt": { "type": "string", "format": "date-time" }
       },
       "required": ["userId", "type", "title", "description", "categoryId", "governorateId"]

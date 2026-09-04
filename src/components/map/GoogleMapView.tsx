@@ -2,7 +2,6 @@ import { useState, useEffect, useMemo, useCallback } from "react";
 import {
   APIProvider,
   Map,
-  Marker,
   InfoWindow,
   useMap,
   useMapsLibrary,
@@ -20,10 +19,13 @@ import {
   Loader2,
   Calendar,
   AlertCircle,
+  Component,
 } from "lucide-react";
 import type { Report, Category, Governorate } from "@/types/models";
 import { YEMEN_CENTER, YEMEN_GOVERNORATES_GEO, getReportCoordinates } from "@/lib/yemen-geo";
 import { ApiKeyPrompt } from "./ApiKeyPrompt";
+import { ClusteredReportMarkers } from "./ClusteredReportMarkers";
+import { PlacesAutocomplete } from "./PlacesAutocomplete";
 
 // Helper to validate Google Maps Platform key structure
 export function isGoogleMapsKeyValid(key?: string | null): boolean {
@@ -42,9 +44,12 @@ export function isGoogleMapsKeyValid(key?: string | null): boolean {
 }
 
 // Get key with fallbacks
-export const GOOGLE_MAPS_KEY = (process.env.GOOGLE_MAPS_PLATFORM_KEY ||
+export const GOOGLE_MAPS_KEY = (
   (import.meta as unknown as { env?: Record<string, string> }).env?.VITE_GOOGLE_MAPS_PLATFORM_KEY ||
-  (globalThis as unknown as { GOOGLE_MAPS_PLATFORM_KEY?: string }).GOOGLE_MAPS_PLATFORM_KEY ||
+  (import.meta as unknown as { env?: Record<string, string> }).env?.VITE_GOOGLE_MAPS_API_KEY ||
+  (typeof process !== "undefined" && (process.env?.GOOGLE_MAPS_PLATFORM_KEY || process.env?.GOOGLE_MAPS_API_KEY || process.env?.VITE_GOOGLE_MAPS_PLATFORM_KEY || process.env?.VITE_GOOGLE_MAPS_API_KEY)) ||
+  (globalThis as unknown as { GOOGLE_MAPS_PLATFORM_KEY?: string; GOOGLE_MAPS_API_KEY?: string }).GOOGLE_MAPS_PLATFORM_KEY ||
+  (globalThis as unknown as { GOOGLE_MAPS_PLATFORM_KEY?: string; GOOGLE_MAPS_API_KEY?: string }).GOOGLE_MAPS_API_KEY ||
   ""
 )
   .split("&")[0]
@@ -71,79 +76,6 @@ interface GoogleMapViewProps {
   reports: Report[];
   categories: Category[];
   governorates: Governorate[];
-}
-
-/**
- * Places Search helper inside Google Map instance
- */
-function MapSearchControl({
-  onSelectLocation,
-}: {
-  onSelectLocation: (lat: number, lng: number, zoom: number) => void;
-}) {
-  const placesLib = useMapsLibrary("places");
-  const map = useMap();
-  const [query, setQuery] = useState("");
-  const [searching, setSearching] = useState(false);
-
-  const handleSearch = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!placesLib || !query.trim() || !map) return;
-
-    setSearching(true);
-    try {
-      const response = await placesLib.Place.searchByText({
-        textQuery: `${query.trim()}, اليمن`,
-        fields: ["displayName", "location", "formattedAddress"],
-        locationBias: map.getCenter() || YEMEN_CENTER,
-        maxResultCount: 5,
-      });
-
-      if (response.places && response.places.length > 0) {
-        const firstPlace = response.places[0];
-        if (firstPlace.location) {
-          const lat =
-            typeof firstPlace.location.lat === "function"
-              ? firstPlace.location.lat()
-              : Number(firstPlace.location.lat);
-          const lng =
-            typeof firstPlace.location.lng === "function"
-              ? firstPlace.location.lng()
-              : Number(firstPlace.location.lng);
-          map.panTo({ lat, lng });
-          map.setZoom(13);
-          onSelectLocation(lat, lng, 13);
-        }
-      }
-    } catch (err) {
-      console.warn("Places text search error:", err);
-    } finally {
-      setSearching(false);
-    }
-  };
-
-  return (
-    <form
-      onSubmit={handleSearch}
-      className="absolute top-4 right-4 z-10 flex w-72 md:w-80 shadow-lg rounded-2xl overflow-hidden bg-background border border-border"
-    >
-      <input
-        type="text"
-        value={query}
-        onChange={(e) => setQuery(e.target.value)}
-        placeholder="ابحث عن مكان في اليمن..."
-        className="flex-1 px-4 py-2.5 text-xs text-right bg-transparent focus:outline-none"
-      />
-      <button
-        type="submit"
-        disabled={searching}
-        aria-label="بحث"
-        className="px-3 bg-primary text-primary-foreground hover:bg-primary/90 flex items-center justify-center"
-      >
-        {searching ? <Loader2 className="size-4 animate-spin" /> : <Search className="size-4" />}
-      </button>
-    </form>
-  );
 }
 
 /**
@@ -190,6 +122,7 @@ export function GoogleMapView({ reports, categories, governorates }: GoogleMapVi
   const [selectedGov, setSelectedGov] = useState<number | null>(null);
   const [selectedCat, setSelectedCat] = useState<number | null>(null);
   const [selectedReport, setSelectedReport] = useState<Report | null>(null);
+  const [clusteringEnabled, setClusteringEnabled] = useState<boolean>(true);
   const [locating, setLocating] = useState(false);
   const [center, setCenter] = useState<{ lat: number; lng: number }>(YEMEN_CENTER);
   const [zoom, setZoom] = useState<number>(7);
@@ -338,6 +271,26 @@ export function GoogleMapView({ reports, categories, governorates }: GoogleMapVi
               </option>
             ))}
           </select>
+
+          {/* Smart Clustering Toggle */}
+          <button
+            type="button"
+            onClick={() => setClusteringEnabled((prev) => !prev)}
+            className={`flex items-center gap-1.5 px-3 py-2 rounded-2xl border text-xs font-bold transition-all ${
+              clusteringEnabled
+                ? "bg-primary/10 border-primary/40 text-primary shadow-xs"
+                : "bg-background border-border text-muted-foreground hover:text-foreground"
+            }`}
+            title="تفعيل أو تعطيل تجميع الدبابيس المتقاربة تلقائياً"
+          >
+            <Layers className="size-3.5" />
+            <span>تجميع ذكي</span>
+            <span
+              className={`size-2 rounded-full ${
+                clusteringEnabled ? "bg-primary animate-pulse" : "bg-muted-foreground/40"
+              }`}
+            />
+          </button>
         </div>
 
         {/* Legend */}
@@ -358,6 +311,7 @@ export function GoogleMapView({ reports, categories, governorates }: GoogleMapVi
       <div className="card-soft rounded-3xl overflow-hidden border border-border relative h-[650px] w-full">
         <APIProvider apiKey={GOOGLE_MAPS_KEY} version="weekly">
           <Map
+            mapId="DEMO_MAP_ID"
             center={center}
             zoom={zoom}
             onCenterChanged={(ev) => setCenter(ev.detail.center)}
@@ -367,30 +321,25 @@ export function GoogleMapView({ reports, categories, governorates }: GoogleMapVi
             gestureHandling="greedy"
             disableDefaultUI={false}
           >
-            <MapSearchControl
-              onSelectLocation={(lat, lng, z) => {
-                setCenter({ lat, lng });
-                setZoom(z);
-              }}
-            />
+            {/* Places Autocomplete Search Bar */}
+            <div className="absolute top-4 right-4 z-20">
+              <PlacesAutocomplete
+                onSelectLocation={(lat, lng, z) => {
+                  setCenter({ lat, lng });
+                  setZoom(z);
+                }}
+              />
+            </div>
 
             <MapControls onReset={handleResetMap} onLocate={handleLocateMe} locating={locating} />
 
-            {/* Markers */}
-            {filteredReports.map((report) => {
-              const coords = getReportCoordinates(report);
-              const isLost = report.type === "lost";
-
-              return (
-                <Marker
-                  key={report.id}
-                  position={coords}
-                  title={report.title}
-                  onClick={() => setSelectedReport(report)}
-                  icon={isLost ? "http://maps.google.com/mapfiles/ms/icons/red-dot.png" : "http://maps.google.com/mapfiles/ms/icons/green-dot.png"}
-                />
-              );
-            })}
+            {/* Smart Clustered Advanced Markers */}
+            <ClusteredReportMarkers
+              reports={filteredReports}
+              selectedReportId={selectedReport?.id}
+              onSelectReport={(r) => setSelectedReport(r as Report)}
+              enableClustering={clusteringEnabled}
+            />
 
             {/* Info Window */}
             {selectedReport && (
@@ -408,13 +357,19 @@ export function GoogleMapView({ reports, categories, governorates }: GoogleMapVi
                     />
                   )}
                   <div className="flex items-center gap-1.5 mb-1">
-                    <span
-                      className={`text-[10px] px-2 py-0.5 rounded-full font-bold text-white ${
-                        selectedReport.type === "lost" ? "bg-rose-500" : "bg-emerald-600"
-                      }`}
-                    >
-                      {selectedReport.type === "lost" ? "مفقود" : "معثور عليه"}
-                    </span>
+                    {selectedReport.is_humanitarian || selectedReport.category_id === 9 ? (
+                      <span className="text-[10px] px-2 py-0.5 rounded-full font-bold bg-red-600 text-white animate-pulse">
+                        🚨 نداء إنساني عاجل
+                      </span>
+                    ) : (
+                      <span
+                        className={`text-[10px] px-2 py-0.5 rounded-full font-bold text-white ${
+                          selectedReport.type === "lost" ? "bg-rose-500" : "bg-emerald-600"
+                        }`}
+                      >
+                        {selectedReport.type === "lost" ? "مفقود" : "معثور عليه"}
+                      </span>
+                    )}
                     {selectedReport.categories?.name_ar && (
                       <span className="text-[10px] bg-secondary text-muted-foreground px-2 py-0.5 rounded-full">
                         {selectedReport.categories.name_ar}

@@ -1,5 +1,5 @@
-import { signInWithPopup, GoogleAuthProvider } from "firebase/auth";
-import { auth, googleProvider } from "./firebase";
+import { signInWithPopup, GoogleAuthProvider, setPersistence, inMemoryPersistence } from "firebase/auth";
+import { auth, gmailGoogleProvider } from "./firebase";
 
 // In-memory token cache (never stored in localStorage as per security guidelines)
 let inMemoryGmailToken: string | null = null;
@@ -23,7 +23,18 @@ export async function requestGmailAccessToken(): Promise<string> {
   if (inMemoryGmailToken) return inMemoryGmailToken;
 
   try {
-    const result = await signInWithPopup(auth, googleProvider);
+    let result;
+    try {
+      result = await signInWithPopup(auth, gmailGoogleProvider);
+    } catch (firstErr: unknown) {
+      const msg = firstErr instanceof Error ? firstErr.message : String(firstErr);
+      if (msg.includes("Database is closing") || msg.includes("closing/hidden")) {
+        await setPersistence(auth, inMemoryPersistence).catch(() => {});
+        result = await signInWithPopup(auth, gmailGoogleProvider);
+      } else {
+        throw firstErr;
+      }
+    }
     const credential = GoogleAuthProvider.credentialFromResult(result);
     if (credential?.accessToken) {
       inMemoryGmailToken = credential.accessToken;

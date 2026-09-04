@@ -83,7 +83,16 @@ export const reports = pgTable("reports", {
   color: varchar("color", { length: 100 }),
   keywords: text("keywords").array(),
   notes: text("notes"),
+  secret_verification_mark: text("secret_verification_mark"),
+  reward_amount: integer("reward_amount"),
   contact_preference: varchar("contact_preference", { length: 50 }).default("in_app"),
+  // Humanitarian / Missing Persons Fields
+  age: varchar("age", { length: 50 }),
+  gender: varchar("gender", { length: 20 }),
+  clothes_description: text("clothes_description"),
+  health_condition: text("health_condition"),
+  emergency_phone: varchar("emergency_phone", { length: 50 }),
+  is_humanitarian: boolean("is_humanitarian").default(false).notNull(),
   created_at: timestamp("created_at").defaultNow().notNull(),
   updated_at: timestamp("updated_at").defaultNow().notNull(),
 });
@@ -138,6 +147,22 @@ export const notifications = pgTable("notifications", {
   created_at: timestamp("created_at").defaultNow().notNull(),
 });
 
+export const reportSightings = pgTable("report_sightings", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  report_id: uuid("report_id")
+    .notNull()
+    .references(() => reports.id, { onDelete: "cascade" }),
+  user_id: uuid("user_id").references(() => users.id, { onDelete: "set null" }),
+  reporter_name: varchar("reporter_name", { length: 255 }),
+  reporter_phone: varchar("reporter_phone", { length: 50 }),
+  sighting_time: varchar("sighting_time", { length: 100 }),
+  location_text: text("location_text").notNull(),
+  latitude: varchar("latitude", { length: 50 }),
+  longitude: varchar("longitude", { length: 50 }),
+  notes: text("notes").notNull(),
+  created_at: timestamp("created_at").defaultNow().notNull(),
+});
+
 // Relations
 export const usersRelations = relations(users, ({ many }) => ({
   reports: many(reports),
@@ -145,6 +170,7 @@ export const usersRelations = relations(users, ({ many }) => ({
   sentMessages: many(messages, { relationName: "sender" }),
   receivedMessages: many(messages, { relationName: "receiver" }),
   notifications: many(notifications),
+  sightings: many(reportSightings),
 }));
 
 export const reportsRelations = relations(reports, ({ one, many }) => ({
@@ -167,6 +193,18 @@ export const reportsRelations = relations(reports, ({ one, many }) => ({
   images: many(reportImages),
   savedBy: many(savedReports),
   messages: many(messages),
+  sightings: many(reportSightings),
+}));
+
+export const reportSightingsRelations = relations(reportSightings, ({ one }) => ({
+  report: one(reports, {
+    fields: [reportSightings.report_id],
+    references: [reports.id],
+  }),
+  user: one(users, {
+    fields: [reportSightings.user_id],
+    references: [users.id],
+  }),
 }));
 export const reportImagesRelations = relations(reportImages, ({ one }) => ({
   report: one(reports, {

@@ -16,8 +16,8 @@ function MessagesPage() {
   const { data: conversations, isLoading } = useQuery({
     queryKey: ["conversations"],
     queryFn: async () => {
-      const res = await api.get("/messages");
-      return res.data as any[];
+      const res = await api.get<any[]>("/messages");
+      return res || [];
     },
     refetchInterval: 10000,
   });
@@ -77,7 +77,15 @@ function MessagesPage() {
                   </p>
                   <p className="text-sm text-muted-foreground truncate">
                     {conv.last_message.sender_id === user?.id && "أنت: "}
-                    {conv.last_message.body}
+                    {conv.last_message.body.startsWith("[VERIFICATION_REQUEST]")
+                      ? "🔒 طلب تحقق أمني من الهوية"
+                      : conv.last_message.body.startsWith("[MEETUP_PROPOSAL]")
+                        ? "📍 اقتراح مكان لقاء عام وآمن"
+                        : conv.last_message.body.startsWith("[HANDOVER_CONFIRMED]")
+                          ? "🎉 تم استلام الأمانة بنجاح"
+                          : conv.last_message.body.startsWith("[IMAGE]")
+                            ? "📷 صورة مرفقة"
+                            : conv.last_message.body}
                   </p>
                 </div>
               </Link>

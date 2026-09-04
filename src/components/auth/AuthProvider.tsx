@@ -124,10 +124,17 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
         // Sync with backend database
         try {
-          await api.post("/auth/sync", {
+          const syncRes = await api.post<{ id?: string }>("/auth/sync", {
             email: currentUser.email,
             full_name: currentUser.displayName || "مستخدم",
           });
+
+          if (syncRes?.id) {
+            setUser({
+              ...authUser,
+              id: syncRes.id,
+            });
+          }
 
           // If permission is already granted, sync FCM token in the background
           if (typeof window !== "undefined" && "Notification" in window && Notification.permission === "granted") {

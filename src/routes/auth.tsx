@@ -7,6 +7,8 @@ import {
   signInWithEmailAndPassword,
   createUserWithEmailAndPassword,
   signInWithPopup,
+  setPersistence,
+  inMemoryPersistence,
   updateProfile,
 } from "firebase/auth";
 import { auth, googleProvider } from "@/lib/firebase";
@@ -96,6 +98,7 @@ function AuthPage() {
 function GoogleButton({ onDone }: { onDone: () => void }) {
   const [loading, setLoading] = useState(false);
   const [unauthorizedDomain, setUnauthorizedDomain] = useState<string | null>(null);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
 
   const currentHost = typeof window !== "undefined" ? window.location.hostname : "";
@@ -112,8 +115,22 @@ function GoogleButton({ onDone }: { onDone: () => void }) {
   const go = async () => {
     setLoading(true);
     setUnauthorizedDomain(null);
+    setErrorMessage(null);
     try {
-      const result = await signInWithPopup(auth, googleProvider);
+      let result;
+      try {
+        result = await signInWithPopup(auth, googleProvider);
+      } catch (firstErr: unknown) {
+        const msg = firstErr instanceof Error ? firstErr.message : String(firstErr);
+        if (msg.includes("Database is closing") || msg.includes("closing/hidden")) {
+          console.warn("Database is closing/hidden encountered, switching to memory persistence and retrying...");
+          await setPersistence(auth, inMemoryPersistence).catch(() => {});
+          result = await signInWithPopup(auth, googleProvider);
+        } else {
+          throw firstErr;
+        }
+      }
+
       const credential = GoogleAuthProvider.credentialFromResult(result);
       if (credential?.accessToken) {
         setGmailAccessToken(credential.accessToken);
@@ -137,20 +154,34 @@ function GoogleButton({ onDone }: { onDone: () => void }) {
         errCode === "auth/popup-closed-by-user" ||
         errCode === "auth/cancelled-popup-request" ||
         errMsg.includes("popup-closed-by-user") ||
-        errMsg.includes("cancelled-popup-request") ||
-        errMsg.includes("cancelled");
+        errMsg.includes("cancelled-popup-request");
 
       const isUnauthorizedDomain =
         errCode === "auth/unauthorized-domain" || errMsg.includes("auth/unauthorized-domain");
 
+      const isPopupBlocked =
+        errCode === "auth/popup-blocked" || errMsg.includes("popup-blocked");
+
+      const isDbClosing =
+        errMsg.includes("Database is closing") || errMsg.includes("closing/hidden");
+
       if (isUserCancellation) {
-        // User closed or cancelled the popup intentionally, no action needed
+        // User closed the popup intentionally
       } else if (isUnauthorizedDomain) {
         console.warn("Google sign in domain unauthorized:", currentHost);
         setUnauthorizedDomain(currentHost);
-        toast.error("النطاق غير مصرح به في Firebase Console");
+        toast.error("نطاق التطبيق بحاجة للإضافة في Firebase Console");
+      } else if (isPopupBlocked) {
+        setErrorMessage("المتصفح قام بحظر النافذة المنبثقة. يرجى السماح بالنوافذ المنبثقة (Pop-ups) لهذا الموقع ثم المحاولة مجدداً.");
+        toast.error("تم حظر النافذة المنبثقة");
+      } else if (isDbClosing) {
+        setErrorMessage("تعذر الاتصال بذاكرة التخزين المحلية للمتصفح مؤقتاً. تم تحديث الإعدادات، يرجى النقر على زر المتابعة مجدداً أو تسجيل الدخول بالبريد وكلمة المرور.");
+        toast.error("تعذّر الوصول لذاكرة التخزين، يرجى إعادة المحاولة");
       } else {
         console.error("Google sign in error:", error);
+        setErrorMessage(
+          errMsg || "تعذر إكمال تسجيل الدخول عبر Google. يمكنك استخدام البريد وكلمة المرور أدناه مباشرة."
+        );
         toast.error("تعذّر تسجيل الدخول بجوجل");
       }
     } finally {
@@ -169,6 +200,16 @@ function GoogleButton({ onDone }: { onDone: () => void }) {
         {loading ? <Loader2 className="size-4 animate-spin" /> : <GoogleIcon />}
         المتابعة باستخدام Google
       </button>
+
+      {errorMessage && (
+        <div className="rounded-2xl border border-destructive/30 bg-destructive/10 p-3.5 text-right text-xs leading-relaxed text-destructive">
+          <div className="flex items-center gap-2 font-bold mb-1">
+            <AlertCircle className="size-4 shrink-0" />
+            <span>تنبيه في تسجيل الدخول</span>
+          </div>
+          <p>{errorMessage}</p>
+        </div>
+      )}
 
       {unauthorizedDomain && (
         <div className="rounded-2xl border border-amber-300 dark:border-amber-800/60 bg-amber-50 dark:bg-amber-950/40 p-4 text-right text-xs leading-relaxed text-amber-900 dark:text-amber-200">
@@ -200,7 +241,7 @@ function GoogleButton({ onDone }: { onDone: () => void }) {
           </div>
           <p className="mt-2 text-[11px] text-muted-foreground">
             الخطوات: افتح Firebase Console &gt; Authentication &gt; Settings &gt; Authorized domains
-            وألصق النطاق أعلاه.
+            وألصق النطاق أعلاه. أو يمكنك <strong>استخدام البريد وكلمة المرور بالأسفل مباشرة</strong> دون أي إعدادات إضافية.
           </p>
         </div>
       )}

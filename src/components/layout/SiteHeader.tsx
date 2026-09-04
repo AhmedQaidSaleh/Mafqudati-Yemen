@@ -39,7 +39,7 @@ export function SiteHeader() {
     queryFn: async () => {
       if (!user) return { unreadCount: 0 };
       const res = await api.get<{ unreadCount: number }>("/notifications/unread-count");
-      return res.data;
+      return res || { unreadCount: 0 };
     },
     enabled: !!user,
     refetchInterval: 30000,

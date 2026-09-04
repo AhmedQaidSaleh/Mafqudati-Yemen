@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { db } from "../db";
-import { reports, reportImages } from "../db/schema";
-import { requireAuth, requireNotRestricted, AuthenticatedRequest } from "../middleware/auth.middleware";
+import { reports, reportImages, reportSightings, notifications } from "../db/schema";
+import { requireAuth, requireNotRestricted, optionalAuth, AuthenticatedRequest } from "../middleware/auth.middleware";
 import { eq, desc, asc, and, or, ilike, inArray, gte, lte, SQL } from "drizzle-orm";
 import {
   notifyReportStatusChange,
@@ -24,6 +24,54 @@ router.get("/stats/counts", async (_req, res) => {
   } catch (error) {
     console.error("Stats count error:", error);
     res.json({ lost: 0, found: 0 });
+  }
+});
+
+// Active urgent humanitarian reports (for emergency banner and ticker)
+router.get("/emergency/active", async (_req, res) => {
+  try {
+    if (!db) return res.json([]);
+    const activeHumanitarian = await db.query.reports.findMany({
+      where: and(
+        eq(reports.status, "active"),
+        or(
+          eq(reports.is_humanitarian, true),
+          eq(reports.category_id, 9)
+        )
+      ),
+      with: {
+        images: {
+          columns: { url: true, sort_order: true },
+        },
+        category: {
+          columns: { name_ar: true, slug: true },
+        },
+        governorate: {
+          columns: { name_ar: true },
+        },
+        district: {
+          columns: { name_ar: true },
+        },
+      },
+      orderBy: desc(reports.created_at),
+      limit: 10,
+    });
+
+    const mapped = activeHumanitarian.map((report) => {
+      const { images, category, governorate, district, secret_verification_mark: _h, ...rest } = report;
+      return {
+        ...rest,
+        report_images: images,
+        categories: category,
+        governorates: governorate,
+        districts: district,
+      };
+    });
+
+    res.json(mapped);
+  } catch (error) {
+    console.error("Emergency active reports error:", error);
+    res.json([]);
   }
 });
 
@@ -83,6 +131,7 @@ router.get("/", async (req, res) => {
       keyword,
       limit,
       sort,
+      is_humanitarian,
     } = req.query;
 
     const conditions: SQL[] = [];
@@ -90,6 +139,10 @@ router.get("/", async (req, res) => {
       conditions.push(eq(reports.status, status as ReportStatus));
     } else {
       conditions.push(inArray(reports.status, ["active", "resolved", "closed"]));
+    }
+
+    if (is_humanitarian === "true") {
+      conditions.push(or(eq(reports.is_humanitarian, true), eq(reports.category_id, 9))!);
     }
 
     if (type && typeof type === "string") {
@@ -141,7 +194,7 @@ router.get("/", async (req, res) => {
     });
 
     const mappedData = data.map((report) => {
-      const { images, category, governorate, district, ...rest } = report;
+      const { images, category, governorate, district, secret_verification_mark: _hiddenSecret, ...rest } = report;
       return {
         ...rest,
         report_images: images,
@@ -157,7 +210,7 @@ router.get("/", async (req, res) => {
   }
 });
 
-router.get("/:id", async (req, res) => {
+router.get("/:id", optionalAuth, async (req: AuthenticatedRequest, res) => {
   try {
     if (!db) return res.status(500).json({ error: "Database not configured" });
     const { id } = req.params;
@@ -183,13 +236,23 @@ router.get("/:id", async (req, res) => {
 
     if (!report) return res.status(404).json({ error: "Not found" });
 
-    const { author, images, category, governorate, district, ...rest } = report;
+    const isOwnerOrAdmin =
+      req.user && (req.user.id === report.user_id || req.user.role === "ADMIN");
+
+    const sightings = await db.query.reportSightings.findMany({
+      where: eq(reportSightings.report_id, reportId),
+      orderBy: desc(reportSightings.created_at),
+    });
+
+    const { author, images, category, governorate, district, secret_verification_mark, ...rest } = report;
     const result = {
       ...rest,
+      secret_verification_mark: isOwnerOrAdmin ? secret_verification_mark : undefined,
       report_images: images,
       categories: category,
       governorates: governorate,
       districts: district,
+      sightings: sightings || [],
       profile: author
         ? {
             full_name: author.full_name,
@@ -223,14 +286,26 @@ router.post("/", requireAuth, requireNotRestricted, async (req: AuthenticatedReq
       [key: string]: unknown;
     };
 
+    const isHumanitarian = Boolean(
+      reportData.is_humanitarian ||
+      Number(reportData.category_id) === 9
+    );
+
     const [newReport] = await db
       .insert(reports)
       .values({
         ...(reportData as unknown as typeof reports.$inferInsert),
         user_id: req.user.id,
+        reward_amount: reportData.reward_amount ? Number(reportData.reward_amount) : null,
         incident_date: reportData.incident_date
           ? new Date(reportData.incident_date as string)
           : null,
+        age: reportData.age ? String(reportData.age) : null,
+        gender: reportData.gender ? String(reportData.gender) : null,
+        clothes_description: reportData.clothes_description ? String(reportData.clothes_description) : null,
+        health_condition: reportData.health_condition ? String(reportData.health_condition) : null,
+        emergency_phone: reportData.emergency_phone ? String(reportData.emergency_phone) : null,
+        is_humanitarian: isHumanitarian,
       })
       .returning();
 
@@ -253,6 +328,61 @@ router.post("/", requireAuth, requireNotRestricted, async (req: AuthenticatedReq
     res.status(201).json(newReport);
   } catch (error) {
     console.error("Create report error:", error);
+    res.status(500).json({ error: "Internal Server Error" });
+  }
+});
+
+// Sighting submission endpoint for humanitarian / missing reports
+router.post("/:id/sightings", optionalAuth, async (req: AuthenticatedRequest, res) => {
+  try {
+    if (!db) return res.status(500).json({ error: "Database not configured" });
+    const { id } = req.params;
+    const reportId = id as string;
+    const { reporter_name, reporter_phone, sighting_time, location_text, latitude, longitude, notes } = req.body;
+
+    if (!location_text || !notes) {
+      return res.status(400).json({ error: "الموقع وتفاصيل المشاهدة مطلوبة" });
+    }
+
+    const report = await db.query.reports.findFirst({
+      where: eq(reports.id, reportId),
+    });
+    if (!report) return res.status(404).json({ error: "البلاغ غير موجود" });
+
+    if (report.status === "resolved") {
+      return res.status(400).json({ error: "تم العثور على المفقود وإغلاق استقبال المشاهدات" });
+    }
+
+    const [sighting] = await db
+      .insert(reportSightings)
+      .values({
+        report_id: reportId,
+        user_id: req.user?.id || null,
+        reporter_name: reporter_name || (req.user?.name || "مواطن متعاون"),
+        reporter_phone: reporter_phone || null,
+        sighting_time: sighting_time || "اليوم",
+        location_text,
+        latitude: latitude ? String(latitude) : null,
+        longitude: longitude ? String(longitude) : null,
+        notes,
+      })
+      .returning();
+
+    // Send in-app notification to the report author
+    try {
+      await db.insert(notifications).values({
+        user_id: report.user_id,
+        type: "match",
+        title: "🚨 إفادة مشاهدة جديدة بخصوص حالتك الإنسانية!",
+        body: `أفاد مواطن بمشاهدة في "${location_text}": ${notes.slice(0, 100)}`,
+      });
+    } catch (notifErr) {
+      console.warn("Failed to notify author of sighting:", notifErr);
+    }
+
+    res.status(201).json(sighting);
+  } catch (error) {
+    console.error("Create sighting error:", error);
     res.status(500).json({ error: "Internal Server Error" });
   }
 });
@@ -296,6 +426,11 @@ router.patch("/:id", requireAuth, async (req: AuthenticatedRequest, res) => {
           newStatus: reportData.status as "active" | "resolved" | "closed",
           actorUserId: req.user.id,
         }).catch((err) => console.warn("notifyReportStatusChange error:", err));
+
+        // When resolved, delete and purge all community sighting records
+        if (reportData.status === "resolved") {
+          await db.delete(reportSightings).where(eq(reportSightings.report_id, reportId));
+        }
       }
     }
 
